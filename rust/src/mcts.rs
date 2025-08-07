@@ -10,11 +10,17 @@ use rand::{
     SeedableRng,
 };
 
+// use crate::{
+//     c4r::{Move, Pos},
+//     types::{policy_from_iter, GameMetadata, GameResult, ModelID, Policy, QValue, Sample},
+//     utils::OrdF32,
+// };
 use crate::{
-    c4r::{Move, Pos},
+    zootopia::{Move, Pos},
     types::{policy_from_iter, GameMetadata, GameResult, ModelID, Policy, QValue, Sample},
     utils::OrdF32,
 };
+
 
 /// A single Monte Carlo Tree Search connect four game.
 /// We store the MCTS tree in Vec form where child pointers are indicated by NodeId (the index
