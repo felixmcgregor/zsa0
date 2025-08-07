@@ -1,7 +1,7 @@
 import pytest
 import torch
 
-from zsa0.nn import ConnectFourNet
+from zsa0.nn import BottinaNet
 from zsa0.tournament import (
     play_tournament,
     ModelPlayer,
@@ -13,7 +13,7 @@ from zsa0.tournament import (
 
 @pytest.mark.asyncio
 async def test_tournament():
-    model = ConnectFourNet()
+    model = BottinaNet()
     model.eval()  # Disable batch normalization
     model_player = ModelPlayer(
         model_id=ModelID(0),

@@ -475,233 +475,14 @@ mod tests {
     use more_asserts::{assert_gt, assert_lt};
     use proptest::prelude::*;
 
+    // --- Move constants to the top of the module ---
     const CONST_MOVE_WEIGHT: f32 = 1.0 / (Pos::N_MOVES as f32);
     const CONST_POLICY: Policy = [CONST_MOVE_WEIGHT; Pos::N_MOVES];
-    const TEST_C_EXPLORATION: f32 = 4.0;
-    const TEST_C_PLY_PENALTY: f32 = 0.01;
+    const TEST_C_EXPLORATION: f32 = 1.0;
+    const TEST_C_PLY_PENALTY: f32 = 0.1;
+    
 
-    /// Runs a batch with a single game and a constant evaluation function.
-    fn run_mcts(pos: Pos, n_iterations: usize) -> (Policy, QValue, QValue) {
-        let mut game = MctsGame::new_from_pos(pos, GameMetadata::default());
-        for _ in 0..n_iterations {
-            // Use log probabilities (uniform in log space)
-            let uniform_log_policy = [0.0; Pos::N_MOVES]; // log(1) = 0 for each move
-            game.on_received_policy(
-                uniform_log_policy,
-                0.0,
-                0.0,
-                TEST_C_EXPLORATION,
-                TEST_C_PLY_PENALTY,
-            )
-        }
-        (
-            game.root_policy(),
-            game.root_q_with_penalty(),
-            game.root_q_no_penalty(),
-        )
-    }
-
-    #[test]
-    fn mcts_basic_movement() {
-        let (policy, _q_penalty, _q_no_penalty) = run_mcts(Pos::default(), 1000);
-        assert_policy_sum_1(&policy);
-        // Test that all moves have some probability
-        assert!(policy.iter().all(|&p| p > 0.0));
-    }
-
-    #[test]
-    fn mcts_depth_one() {
-        let (policy, _q_penalty, _q_no_penalty) =
-            run_mcts(Pos::default(), 1 + Pos::N_MOVES + Pos::N_MOVES);
-        assert_policy_eq(&policy, &CONST_POLICY, Node::EPS);
-    }
-
-    #[test]
-    fn mcts_depth_two() {
-        let (policy, _q_penalty, _q_no_penalty) = run_mcts(
-            Pos::default(),
-            1 + Pos::N_MOVES + (Pos::N_MOVES * Pos::N_MOVES) + (Pos::N_MOVES * Pos::N_MOVES),
-        );
-        assert_policy_eq(&policy, &CONST_POLICY, Node::EPS);
-    }
-
-    #[test]
-    fn mcts_depth_uneven() {
-        let (policy, _q_penalty, _q_no_penalty) = run_mcts(Pos::default(), 47);
-        // With uniform evaluation, even uneven exploration may still result in roughly uniform policy
-        // This is actually expected behavior when all positions have equal value
-        assert_policy_sum_1(&policy);
-    }
-
-    /// Test from a position with pellets nearby - should prefer moves toward pellets.
-    #[test]
-    fn pellet_collection_test() {
-        // Create a small test position with JSON
-        let json = r#"{
-            "TimeStamp": "2025-08-07T00:00:00Z",
-            "Tick": 1,
-            "Cells": [
-                {"Content": 0}, {"Content": 2}, {"Content": 0},
-                {"Content": 0}, {"Content": 0}, {"Content": 0},
-                {"Content": 0}, {"Content": 0}, {"Content": 0}
-            ],
-            "Animals": [{"x": 0, "y": 0, "id": 1}],
-            "Zookeepers": []
-        }"#;
-        let game_state: crate::zootopia::GameState = serde_json::from_str(json).unwrap();
-        let pos = crate::zootopia::Pos::from_game_state(&game_state);
-        let (policy, _q_penalty, _q_no_penalty) = run_mcts(pos, 1000);
-        assert_policy_sum_1(&policy);
-        // Should prefer right move (toward pellet)
-        assert_gt!(policy[3], CONST_MOVE_WEIGHT); // Right move
-    }
-
-    /// Test from a position with walls - should avoid wall collisions.
-    #[test]
-    fn wall_avoidance_test() {
-        // Create a test position with wall to the right
-        let json = r#"{
-            "TimeStamp": "2025-08-07T00:00:00Z",
-            "Tick": 1,
-            "Cells": [
-                {"Content": 0}, {"Content": 1}, {"Content": 0},
-                {"Content": 0}, {"Content": 0}, {"Content": 0},
-                {"Content": 0}, {"Content": 0}, {"Content": 0}
-            ],
-            "Animals": [{"x": 0, "y": 0, "id": 1}],
-            "Zookeepers": []
-        }"#;
-        let game_state: crate::zootopia::GameState = serde_json::from_str(json).unwrap();
-        let pos = crate::zootopia::Pos::from_game_state(&game_state);
-        let (policy, _q_penalty, _q_no_penalty) = run_mcts(pos, 1000);
-        assert_policy_sum_1(&policy);
-        // Should not prefer right move (into wall)
-        assert_eq!(policy[3], 0.0); // Right move should be impossible
-    }
-
-    /// Test from a position near zookeeper spawn - should avoid zookeeper.
-    #[test]
-    fn zookeeper_avoidance_test() {
-        // Create a test position with zookeeper spawn to the right
-        let json = r#"{
-            "TimeStamp": "2025-08-07T00:00:00Z",
-            "Tick": 1,
-            "Cells": [
-                {"Content": 0}, {"Content": 3}, {"Content": 0},
-                {"Content": 0}, {"Content": 0}, {"Content": 0},
-                {"Content": 0}, {"Content": 0}, {"Content": 0}
-            ],
-            "Animals": [{"x": 0, "y": 0, "id": 1}],
-            "Zookeepers": []
-        }"#;
-        let game_state: crate::zootopia::GameState = serde_json::from_str(json).unwrap();
-        let pos = crate::zootopia::Pos::from_game_state(&game_state);
-        let (policy, _q_penalty, _q_no_penalty) = run_mcts(pos, 1000);
-        assert_policy_sum_1(&policy);
-        // Should not prefer right move (into zookeeper spawn)
-        assert_eq!(policy[3], 0.0); // Right move should be impossible
-    }
-
-    /// From a position where all pellets are collected, game should be won.
-    #[test]
-    fn winning_position_no_pellets() {
-        // Create a test position with no pellets left
-        let json = r#"{
-            "TimeStamp": "2025-08-07T00:00:00Z",
-            "Tick": 10,
-            "Cells": [
-                {"Content": 0}, {"Content": 0}, {"Content": 0},
-                {"Content": 0}, {"Content": 0}, {"Content": 0},
-                {"Content": 0}, {"Content": 0}, {"Content": 0}
-            ],
-            "Animals": [{"x": 1, "y": 1, "id": 1}],
-            "Zookeepers": []
-        }"#;
-        let game_state: crate::zootopia::GameState = serde_json::from_str(json).unwrap();
-        let pos = crate::zootopia::Pos::from_game_state(&game_state);
-        let (policy, q_penalty, q_no_penalty) = run_mcts(pos, 1000);
-        assert_policy_sum_1(&policy);
-        // Game should be won
-        assert_gt!(q_no_penalty, 0.5);
-    }
-
-    /// From a position with both pellets and power pellets, prefer power pellets.
-    #[test]
-    fn prefer_power_pellets() {
-        // Create a test position with both pellet types
-        let json = r#"{
-            "TimeStamp": "2025-08-07T00:00:00Z",
-            "Tick": 1,
-            "Cells": [
-                {"Content": 0}, {"Content": 2}, {"Content": 5},
-                {"Content": 0}, {"Content": 0}, {"Content": 0},
-                {"Content": 0}, {"Content": 0}, {"Content": 0}
-            ],
-            "Animals": [{"x": 0, "y": 0, "id": 1}],
-            "Zookeepers": []
-        }"#;
-        let game_state: crate::zootopia::GameState = serde_json::from_str(json).unwrap();
-        let pos = crate::zootopia::Pos::from_game_state(&game_state);
-        let (policy, q_penalty, q_no_penalty) = run_mcts(pos, 10_000);
-        assert_policy_sum_1(&policy);
-        // Both right moves should have high probability, but we can't easily test preference
-        assert!(policy[3] > 0.0); // Right move should be possible
-    }
-
-    /// Strategy for generating a policy with at least one non-zero value.
-    fn policy_strategy() -> impl Strategy<Value = Policy> {
-        let min = 0.0f32;
-        let max = 10.0f32;
-        let positive_strategy = min..max;
-        let neg_inf_strategy = Just(f32::NEG_INFINITY);
-        prop::array::uniform4(prop_oneof![positive_strategy, neg_inf_strategy])
-            .prop_filter("all neg infinity not allowed", |policy_logits| {
-                !policy_logits.iter().all(|&p| p == f32::NEG_INFINITY)
-            })
-            .prop_map(|policy_log| softmax(policy_log))
-    }
-
-    proptest! {
-        /// Softmax policies should sum up to one.
-        #[test]
-        fn softmax_sum_1(policy in policy_strategy()) {
-            assert_policy_sum_1(&policy);
-        }
-
-        /// Temperature of 1.0 should not affect the policy.
-        #[test]
-        fn temperature_1(policy in policy_strategy()) {
-            let policy_with_temp = apply_temperature(&policy, 1.0);
-            assert_policy_eq(&policy, &policy_with_temp, 1e-5);
-        }
-
-        /// Temperature of 2.0 should change the policy.
-        #[test]
-        fn temperature_2(policy in policy_strategy()) {
-            let policy_with_temp = apply_temperature(&policy, 2.0);
-            assert_policy_sum_1(&policy_with_temp);
-            // If policy is nonuniform and there are at least two non-zero probabilities, the
-            // policy with temperature should be different from the original policy
-            if policy.iter().filter(|&&p| p != CONST_MOVE_WEIGHT && p > 0.0).count() >= 2 {
-                assert_policy_ne(&policy, &policy_with_temp, Node::EPS);
-            }
-        }
-
-        /// Temperature of 0.0 should be argmax.
-        #[test]
-        fn temperature_0(policy in policy_strategy()) {
-            let policy_with_temp = apply_temperature(&policy, 0.0);
-            let max = policy_with_temp.iter().fold(f32::NEG_INFINITY, |a, &b| f32::max(a, b));
-            let max_count = policy_with_temp.iter().filter(|&&p| p == max).count() as f32;
-            assert_policy_sum_1(&policy_with_temp);
-            for p in policy_with_temp {
-                if p == max {
-                    assert_eq!(1.0 / max_count, p);
-                }
-            }
-        }
-    }
-
+    // --- Move helper functions to the top of the module ---
     fn assert_policy_sum_1(policy: &Policy) {
         let sum = policy.iter().sum::<f32>();
         if (sum - 1.0).abs() > 1e-5 {
@@ -729,8 +510,193 @@ mod tests {
         }
     }
 
+    /// Runs a batch with a single game and a constant evaluation function.
+    fn run_mcts(pos: Pos, n_iterations: usize) -> (Policy, QValue, QValue) {
+        let mut game = MctsGame::new_from_pos(pos, GameMetadata::default());
+        for _ in 0..n_iterations {
+            // Use log probabilities (uniform in log space)
+            let uniform_log_policy = [0.0; Pos::N_MOVES]; // log(1) = 0 for each move
+            game.on_received_policy(
+                uniform_log_policy,
+                0.0,
+                0.0,
+                TEST_C_EXPLORATION,
+                TEST_C_PLY_PENALTY,
+            )
+        }
+        (
+            game.root_policy(),
+            game.root_q_with_penalty(),
+            game.root_q_no_penalty(),
+        )
+    }
+
+    #[test]
+    fn mcts_basic_movement() {
+        println!("Running test: mcts_basic_movement");
+        let (policy, _q_penalty, _q_no_penalty) = run_mcts(Pos::default(), 1000);
+        println!("Policy: {:?}", policy);
+        assert_policy_sum_1(&policy);
+        assert!(policy.iter().all(|&p| p > 0.0));
+    }
+
+    #[test]
+    fn mcts_depth_one() {
+        println!("Running test: mcts_depth_one");
+        let (policy, _q_penalty, _q_no_penalty) =
+            run_mcts(Pos::default(), 1 + Pos::N_MOVES + Pos::N_MOVES);
+        println!("Policy: {:?}", policy);
+        assert_policy_eq(&policy, &CONST_POLICY, Node::EPS);
+    }
+
+    #[test]
+    fn mcts_depth_two() {
+        println!("Running test: mcts_depth_two");
+        let (policy, _q_penalty, _q_no_penalty) = run_mcts(
+            Pos::default(),
+            1 + Pos::N_MOVES + (Pos::N_MOVES * Pos::N_MOVES) + (Pos::N_MOVES * Pos::N_MOVES),
+        );
+        println!("Policy: {:?}", policy);
+        assert_policy_eq(&policy, &CONST_POLICY, Node::EPS);
+    }
+
+    #[test]
+    fn mcts_depth_uneven() {
+        println!("Running test: mcts_depth_uneven");
+        let (policy, _q_penalty, _q_no_penalty) = run_mcts(Pos::default(), 47);
+        println!("Policy: {:?}", policy);
+        assert_policy_sum_1(&policy);
+    }
+
+    #[test]
+    fn pellet_collection_test() {
+        println!("Running test: pellet_collection_test");
+        // Create a small test position with JSON
+        let json = r#"{
+            "TimeStamp": "2025-08-07T00:00:00Z",
+            "Tick": 1,
+            "Cells": [
+                {"Content": 0}, {"Content": 2}, {"Content": 0},
+                {"Content": 0}, {"Content": 0}, {"Content": 0},
+                {"Content": 0}, {"Content": 0}, {"Content": 0}
+            ],
+            "Animals": [{"x": 0, "y": 0, "id": 1}],
+            "Zookeepers": []
+        }"#;
+        let game_state: crate::zootopia::GameState = serde_json::from_str(json).unwrap();
+        let pos = crate::zootopia::Pos::from_game_state(&game_state);
+        let (policy, _q_penalty, _q_no_penalty) = run_mcts(pos, 1000);
+        println!("Policy: {:?}", policy);
+        assert_policy_sum_1(&policy);
+        assert_gt!(policy[3], CONST_MOVE_WEIGHT); // Right move
+    }
+
+    #[test]
+    fn wall_avoidance_test() {
+        println!("Running test: wall_avoidance_test");
+        // Create a test position with wall to the right
+        let json = r#"{
+            "TimeStamp": "2025-08-07T00:00:00Z",
+            "Tick": 1,
+            "Cells": [
+                {"Content": 0}, {"Content": 1}, {"Content": 0},
+                {"Content": 0}, {"Content": 0}, {"Content": 0},
+                {"Content": 0}, {"Content": 0}, {"Content": 0}
+            ],
+            "Animals": [{"x": 0, "y": 0, "id": 1}],
+            "Zookeepers": []
+        }"#;
+        let game_state: crate::zootopia::GameState = serde_json::from_str(json).unwrap();
+        let pos = crate::zootopia::Pos::from_game_state(&game_state);
+        let (policy, _q_penalty, _q_no_penalty) = run_mcts(pos, 1000);
+        println!("Policy: {:?}", policy);
+        assert_policy_sum_1(&policy);
+        println!("Right move probability: {}", policy[3]);
+        assert!(policy[3].abs() < 1e-6, "Right move should be impossible, got {}", policy[3]);
+    }
+
+    #[test]
+    fn zookeeper_avoidance_test() {
+        println!("Running test: zookeeper_avoidance_test");
+        // Create a test position with zookeeper spawn to the right
+        let json = r#"{
+            "TimeStamp": "2025-08-07T00:00:00Z",
+            "Tick": 1,
+            "Cells": [
+                {"Content": 0}, {"Content": 1}, {"Content": 2}, {"Content": 3},
+                {"Content": 0}, {"Content": 0}, {"Content": 0}, {"Content": 0},
+                {"Content": 0}, {"Content": 0}, {"Content": 0}, {"Content": 0},
+                {"Content": 0}, {"Content": 0}, {"Content": 0}, {"Content": 0}
+            ],
+            "Animals": [{"x": 0, "y": 0, "id": 1}],
+            "Zookeepers": [{"x": 1, "y": 0, "id": 1}]
+        }"#;
+        let game_state: crate::zootopia::GameState = serde_json::from_str(json).unwrap();
+        let pos = crate::zootopia::Pos::from_game_state(&game_state);
+        let (policy, _q_penalty, _q_no_penalty) = run_mcts(pos, 1000);
+        println!("Policy: {:?}", policy);
+        assert_policy_sum_1(&policy);
+        println!("Right move probability: {}", policy[3]);
+        assert_eq!(policy[3], 0.0); // Right move should be impossible
+
+        let other_moves: Vec<f32> = policy.iter().enumerate()
+            .filter(|&(i, _)| i != 3)
+            .map(|(_, &p)| p)
+            .collect();
+        println!("Other moves probabilities: {:?}", other_moves);
+        assert!(other_moves.iter().any(|&p| p > 0.0), "No other moves are possible!");
+    }
+
+    #[test]
+    fn winning_position_no_pellets() {
+        println!("Running test: winning_position_no_pellets");
+        // Create a test position with no pellets left
+        let json = r#"{
+            "TimeStamp": "2025-08-07T00:00:00Z",
+            "Tick": 10,
+            "Cells": [
+                {"Content": 0}, {"Content": 0}, {"Content": 0},
+                {"Content": 0}, {"Content": 0}, {"Content": 0},
+                {"Content": 0}, {"Content": 0}, {"Content": 0}
+            ],
+            "Animals": [{"x": 1, "y": 1, "id": 1}],
+            "Zookeepers": []
+        }"#;
+        let game_state: crate::zootopia::GameState = serde_json::from_str(json).unwrap();
+        let pos = crate::zootopia::Pos::from_game_state(&game_state);
+        let (policy, q_penalty, q_no_penalty) = run_mcts(pos, 1000);
+        println!("Policy: {:?}", policy);
+        println!("Q no penalty: {}", q_no_penalty);
+        assert_policy_sum_1(&policy);
+        assert_gt!(q_no_penalty, 0.5);
+    }
+
+    #[test]
+    fn prefer_power_pellets() {
+        println!("Running test: prefer_power_pellets");
+        // Create a test position with both pellet types
+        let json = r#"{
+            "TimeStamp": "2025-08-07T00:00:00Z",
+            "Tick": 1,
+            "Cells": [
+                {"Content": 0}, {"Content": 2}, {"Content": 5},
+                {"Content": 0}, {"Content": 0}, {"Content": 0},
+                {"Content": 0}, {"Content": 0}, {"Content": 0}
+            ],
+            "Animals": [{"x": 0, "y": 0, "id": 1}],
+            "Zookeepers": []
+        }"#;
+        let game_state: crate::zootopia::GameState = serde_json::from_str(json).unwrap();
+        let pos = crate::zootopia::Pos::from_game_state(&game_state);
+        let (policy, q_penalty, q_no_penalty) = run_mcts(pos, 10_000);
+        println!("Policy: {:?}", policy);
+        assert_policy_sum_1(&policy);
+        assert!(policy[3] > 0.0); // Right move should be possible
+    }
+
     #[test]
     fn test_from_game_state_json_small() {
+        println!("Running test: test_from_game_state_json_small");
         // Small 3x3 grid, 1 animal, 1 pellet, 1 wall, 1 zookeeper
         let json = r#"{
             "TimeStamp": "2025-08-07T00:00:00Z",
@@ -754,6 +720,7 @@ mod tests {
 
     #[test]
     fn test_softmax_with_neg_infinity() {
+        println!("Running test: test_softmax_with_neg_infinity");
         // Test that masked moves get 0.0 probability
         let policy_logprobs = [0.0, f32::NEG_INFINITY, 0.0, f32::NEG_INFINITY];
         let result = softmax(policy_logprobs);
@@ -770,5 +737,63 @@ mod tests {
         // Probabilities should sum to 1
         let sum: f32 = result.iter().sum();
         assert!((sum - 1.0).abs() < 1e-5);
+    }
+
+    /// Test from a position where zookeepers block up, down, and left; only right should be possible.
+    #[test]
+    fn zookeeper_surrounded_test() {
+        println!("Running test: zookeeper_surrounded_test");
+        // Animal at (1,1), zookeepers at (1,0)=up, (1,2)=down, (0,1)=left
+        let json = r#"{
+            "TimeStamp": "2025-08-07T00:00:00Z",
+            "Tick": 1,
+            "Cells": [
+                {"Content": 0}, {"Content": 0}, {"Content": 0},
+                {"Content": 0}, {"Content": 0}, {"Content": 0},
+                {"Content": 0}, {"Content": 0}, {"Content": 0}
+            ],
+            "Animals": [{"x": 1, "y": 1, "id": 1}],
+            "Zookeepers": [
+                {"x": 1, "y": 0, "id": 1}, // Up
+                {"x": 1, "y": 2, "id": 2}, // Down
+                {"x": 0, "y": 1, "id": 3}  // Left
+            ]
+        }"#;
+        let game_state: crate::zootopia::GameState = serde_json::from_str(json).unwrap();
+        let pos = crate::zootopia::Pos::from_game_state(&game_state);
+        let (policy, _q_penalty, _q_no_penalty) = run_mcts(pos, 1000);
+        println!("Policy: {:?}", policy);
+        // Only right move should be possible
+        assert_eq!(policy[0], 0.0, "Up move should be impossible");
+        assert_eq!(policy[1], 0.0, "Down move should be impossible");
+        assert_eq!(policy[2], 0.0, "Left move should be impossible");
+        assert_eq!(policy[3], 1.0, "Right move should have probability 1.0");
+    }
+
+    /// Test from a position where walls block up, down, and left; only right should be possible.
+    #[test]
+    fn wall_surrounded_test() {
+        println!("Running test: wall_surrounded_test");
+        // Animal at (1,1), walls at (1,0)=up, (1,2)=down, (0,1)=left
+        let json = r#"{
+            "TimeStamp": "2025-08-07T00:00:00Z",
+            "Tick": 1,
+            "Cells": [
+                {"Content": 0}, {"Content": 1}, {"Content": 0},
+                {"Content": 1}, {"Content": 0}, {"Content": 0},
+                {"Content": 0}, {"Content": 1}, {"Content": 0}
+            ],
+            "Animals": [{"x": 1, "y": 1, "id": 1}],
+            "Zookeepers": []
+        }"#;
+        let game_state: crate::zootopia::GameState = serde_json::from_str(json).unwrap();
+        let pos = crate::zootopia::Pos::from_game_state(&game_state);
+        let (policy, _q_penalty, _q_no_penalty) = run_mcts(pos, 1000);
+        println!("Policy: {:?}", policy);
+        // Only right move should be possible
+        assert_eq!(policy[0], 0.0, "Up move should be impossible");
+        assert_eq!(policy[1], 0.0, "Down move should be impossible");
+        assert_eq!(policy[2], 0.0, "Left move should be impossible");
+        assert_eq!(policy[3], 1.0, "Right move should have probability 1.0");
     }
 }

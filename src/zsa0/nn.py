@@ -13,7 +13,7 @@ from zsa0_rust import N_COLS, N_ROWS  # type: ignore
 
 
 class ModelConfig(BaseModel):
-    """Configuration for ConnectFourNet."""
+    """Configuration for BottinaNet."""
 
     n_residual_blocks: int
     """The number of residual blocks."""
@@ -37,7 +37,7 @@ class ModelConfig(BaseModel):
     """L2 weight decay regularization for the optimizer"""
 
 
-class ConnectFourNet(pl.LightningModule):
+class BottinaNet(pl.LightningModule):
     """
     A CNN that takes in as input connect four positions and outputs a policy (in logprob space)
     and two Q Values. The policy is a (log) probability distribution over moves. q_penalty
@@ -61,7 +61,7 @@ class ConnectFourNet(pl.LightningModule):
         self.l2_reg = config.l2_reg
 
         self.conv = nn.Sequential(
-            nn.Conv2d(2, config.conv_filter_size, kernel_size=3, padding=1),
+            nn.Conv2d(3, config.conv_filter_size, kernel_size=3, padding=1),
             *[
                 ResidualBlock(config.conv_filter_size)
                 for i in range(config.n_residual_blocks)
@@ -131,7 +131,7 @@ class ConnectFourNet(pl.LightningModule):
     def _calculate_conv_output_size(self):
         """Helper function to calculate the output size of the convolutional block."""
         # Apply the convolutional layers to a dummy input
-        dummy_input = torch.zeros(1, 2, N_ROWS, N_COLS)
+        dummy_input = torch.zeros(1, 3, N_ROWS, N_COLS)
         with torch.no_grad():
             dummy_output = self.conv(dummy_input)
         return int(torch.numel(dummy_output))

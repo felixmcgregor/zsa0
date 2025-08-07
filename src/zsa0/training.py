@@ -15,7 +15,7 @@ from pytorch_lightning.callbacks import EarlyStopping
 import torch
 from torch.utils.data import DataLoader
 
-from zsa0.nn import ConnectFourNet, ModelConfig
+from zsa0.nn import BottinaNet, ModelConfig
 from zsa0.utils import BestModelCheckpoint
 
 import zsa0_rust  # type: ignore
@@ -49,7 +49,7 @@ class TrainingGen(BaseModel):
         self,
         base_dir: str,
         games: Optional[PlayGamesResult],
-        model: ConnectFourNet,
+        model: BottinaNet,
     ):
         gen_dir = self.gen_folder(base_dir)
         os.makedirs(gen_dir, exist_ok=True)
@@ -129,7 +129,7 @@ class TrainingGen(BaseModel):
                 self_play_batch_size=self_play_batch_size,
                 training_batch_size=training_batch_size,
             )
-            model = ConnectFourNet(model_config)
+            model = BottinaNet(model_config)
             gen.save_all(base_dir, None, model)
             return gen
 
@@ -138,7 +138,7 @@ class TrainingGen(BaseModel):
         with open(os.path.join(gen_folder, "games.pkl"), "rb") as f:
             return pickle.load(f)
 
-    def get_model(self, base_dir: str) -> ConnectFourNet:
+    def get_model(self, base_dir: str) -> BottinaNet:
         """Gets the model for this generation."""
         gen_folder = self.gen_folder(base_dir)
         with open(os.path.join(gen_folder, "model.pkl"), "rb") as f:

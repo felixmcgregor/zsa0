@@ -7,7 +7,7 @@ import pytorch_lightning as pl
 from pytorch_lightning.callbacks import EarlyStopping
 
 from zsa0.training import SampleDataModule, TrainingGen
-from zsa0.nn import ConnectFourNet, ModelConfig
+from zsa0.nn import BottinaNet, ModelConfig
 from zsa0_rust import Sample  # type: ignore
 
 
@@ -33,7 +33,7 @@ def objective(trial: optuna.Trial, samples: List[Sample]):
         lr_schedule={0: trial.suggest_loguniform("learning_rate", 1e-4, 1e-2)},
         l2_reg=trial.suggest_loguniform("l2_reg", 1e-5, 1e-3),
     )
-    model = ConnectFourNet(model_config)
+    model = BottinaNet(model_config)
 
     batch_size = trial.suggest_categorical("batch_size", [256, 512, 1024])
 

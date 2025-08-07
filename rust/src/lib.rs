@@ -38,4 +38,3 @@ fn zsa0_rust(_py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
 }
 
 pub mod debug_tests;
-pub mod softmax_debug;

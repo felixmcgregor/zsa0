@@ -1,8 +1,8 @@
 import pytest
 import torch
 
-from zsa0.nn import BottinaNet
 from zsa0.zs import N_COLS, N_ROWS, STARTING_POS
+from zsa0.nn import BottinaNet
 
 
 def test_random_nn_works():

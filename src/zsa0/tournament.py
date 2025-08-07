@@ -14,7 +14,7 @@ from loguru import logger
 from tabulate import tabulate
 import torch
 
-from zsa0.nn import ConnectFourNet
+from zsa0.nn import BottinaNet
 import zsa0_rust  # type: ignore
 from zsa0_rust import N_COLS  # type: ignore
 
@@ -36,12 +36,12 @@ class Player(abc.ABC):
 
 
 class ModelPlayer(Player):
-    """Player whose policy and value are determined by a ConnectFourNet."""
+    """Player whose policy and value are determined by a BottinaNet."""
 
-    model: ConnectFourNet
+    model: BottinaNet
     device: torch.device
 
-    def __init__(self, model_id: ModelID, model: ConnectFourNet, device: torch.device):
+    def __init__(self, model_id: ModelID, model: BottinaNet, device: torch.device):
         super().__init__(f"gen{model_id}", model_id)
         self.model_id = model_id
         self.model = model
