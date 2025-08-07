@@ -14,9 +14,9 @@ from loguru import logger
 from tabulate import tabulate
 import torch
 
-from c4a0.nn import ConnectFourNet
-import c4a0_rust  # type: ignore
-from c4a0_rust import N_COLS  # type: ignore
+from zsa0.nn import ConnectFourNet
+import zsa0_rust  # type: ignore
+from zsa0_rust import N_COLS  # type: ignore
 
 PlayerName = NewType("PlayerName", str)
 
@@ -83,7 +83,7 @@ class TournamentResult:
 
     model_ids: List[ModelID]
     date: datetime = field(default_factory=datetime.now)
-    games: Optional[c4a0_rust.PlayGamesResult] = None
+    games: Optional[zsa0_rust.PlayGamesResult] = None
 
     def get_scores(self) -> List[Tuple[ModelID, float]]:
         scores: Dict[ModelID, float] = defaultdict(lambda: 0.0)
@@ -124,10 +124,10 @@ def play_tournament(
     )
     player_ids = [player.model_id for player in players]
     pairings = list(itertools.permutations(player_ids, 2)) * int(games_per_match / 2)
-    reqs = [c4a0_rust.GameMetadata(id, p0, p1) for id, (p0, p1) in enumerate(pairings)]
+    reqs = [zsa0_rust.GameMetadata(id, p0, p1) for id, (p0, p1) in enumerate(pairings)]
 
     logger.info(f"Beginning tournament with {len(players)} players")
-    tournament.games = c4a0_rust.play_games(
+    tournament.games = zsa0_rust.play_games(
         reqs,
         batch_size,
         mcts_iterations,

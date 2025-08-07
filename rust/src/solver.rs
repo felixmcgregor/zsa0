@@ -239,7 +239,7 @@ mod tests {
     use super::*;
 
     // TODO: Dynamically pull/compile this solver in CI
-    const PATH_TO_SOLVER: &str = "/home/advait/connect4/c4solver";
+    const PATH_TO_SOLVER: &str = "/home/advait/connect4/solver";
     const PATH_TO_BOOK: &str = "/home/advait/connect4/7x6.book";
 
     fn paths_exist() -> bool {

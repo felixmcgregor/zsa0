@@ -53,10 +53,10 @@ pub fn play_games<'py>(
 }
 
 /// The result of [play_games].
-/// Note we explicitly spcify pyclass(module="c4a0_rust") as the module name is required in
+/// Note we explicitly spcify pyclass(module="zsa0_rust") as the module name is required in
 /// order for pickling to work.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[pyclass(module = "c4a0_rust")]
+#[pyclass(module = "zsa0_rust")]
 pub struct PlayGamesResult {
     #[pyo3(get)]
     pub results: Vec<GameResult>,

@@ -10,11 +10,6 @@ use rand::{
     SeedableRng,
 };
 
-// use crate::{
-//     c4r::{Move, Pos},
-//     types::{policy_from_iter, GameMetadata, GameResult, ModelID, Policy, QValue, Sample},
-//     utils::OrdF32,
-// };
 use crate::{
     zootopia::{Move, Pos},
     types::{policy_from_iter, GameMetadata, GameResult, ModelID, Policy, QValue, Sample},

@@ -16,18 +16,18 @@ parent_dir = Path(__file__).resolve().parent.parent
 if str(parent_dir) not in sys.path:
     sys.path.insert(0, str(parent_dir))
 
-from c4a0.nn import ModelConfig  # noqa: E402
-from c4a0.sweep import perform_hparam_sweep  # noqa: E402
-from c4a0.tournament import ModelID, RandomPlayer, UniformPlayer  # noqa: E402
-from c4a0.training import (  # noqa: E402
+from zsa0.nn import ModelConfig  # noqa: E402
+from zsa0.sweep import perform_hparam_sweep  # noqa: E402
+from zsa0.tournament import ModelID, RandomPlayer, UniformPlayer  # noqa: E402
+from zsa0.training import (  # noqa: E402
     SolverConfig,
     TrainingGen,
     parse_lr_schedule,
     training_loop,
 )
-from c4a0.utils import get_torch_device  # noqa: E402
+from zsa0.utils import get_torch_device  # noqa: E402
 
-import c4a0_rust  # noqa: E402
+import zsa0_rust  # noqa: E402
 
 app = typer.Typer()
 
@@ -110,7 +110,7 @@ def play(
     else:
         raise ValueError(f"unrecognized model: {model}")
 
-    c4a0_rust.run_tui(  # type: ignore
+    zsa0_rust.run_tui(  # type: ignore
         lambda model_id, x: nn.forward_numpy(x),
         max_mcts_iters,
         c_exploration,

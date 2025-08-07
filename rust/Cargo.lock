@@ -146,30 +146,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "c4a0_rust"
-version = "0.1.0"
-dependencies = [
- "approx",
- "crossbeam",
- "crossbeam-channel",
- "env_logger",
- "indicatif",
- "log",
- "more-asserts",
- "num_cpus",
- "numpy",
- "parking_lot",
- "proptest",
- "pyo3",
- "rand",
- "ratatui",
- "rocksdb",
- "serde",
- "serde_cbor",
- "serde_json",
-]
-
-[[package]]
 name = "cassowary"
 version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1475,6 +1451,30 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn",
+]
+
+[[package]]
+name = "zsa0_rust"
+version = "0.1.0"
+dependencies = [
+ "approx",
+ "crossbeam",
+ "crossbeam-channel",
+ "env_logger",
+ "indicatif",
+ "log",
+ "more-asserts",
+ "num_cpus",
+ "numpy",
+ "parking_lot",
+ "proptest",
+ "pyo3",
+ "rand",
+ "ratatui",
+ "rocksdb",
+ "serde",
+ "serde_cbor",
+ "serde_json",
 ]
 
 [[package]]

@@ -1,8 +1,8 @@
 import pytest
 import torch
 
-from c4a0.nn import ConnectFourNet
-from c4a0.tournament import (
+from zsa0.nn import ConnectFourNet
+from zsa0.tournament import (
     play_tournament,
     ModelPlayer,
     RandomPlayer,

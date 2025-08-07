@@ -15,11 +15,11 @@ from pytorch_lightning.callbacks import EarlyStopping
 import torch
 from torch.utils.data import DataLoader
 
-from c4a0.nn import ConnectFourNet, ModelConfig
-from c4a0.utils import BestModelCheckpoint
+from zsa0.nn import ConnectFourNet, ModelConfig
+from zsa0.utils import BestModelCheckpoint
 
-import c4a0_rust  # type: ignore
-from c4a0_rust import PlayGamesResult, BUF_N_CHANNELS, N_COLS, N_ROWS, Sample  # type: ignore
+import zsa0_rust  # type: ignore
+from zsa0_rust import PlayGamesResult, BUF_N_CHANNELS, N_COLS, N_ROWS, Sample  # type: ignore
 
 
 class TrainingGen(BaseModel):
@@ -166,7 +166,7 @@ def train_single_gen(
 ) -> TrainingGen:
     """
     Trains a new generation from the given parent.
-    First generate games using c4a0_rust.play_games.
+    First generate games using zsa0_rust.play_games.
     Then train a new model based on the parent model using the generated samples.
     Finally, save the resulting games and model in the training directory.
     """
@@ -178,8 +178,8 @@ def train_single_gen(
     # Self play
     model = parent.get_model(base_dir)
     model.to(device)
-    reqs = [c4a0_rust.GameMetadata(id, 0, 0) for id in range(n_self_play_games)]  # type: ignore
-    games = c4a0_rust.play_games(  # type: ignore
+    reqs = [zsa0_rust.GameMetadata(id, 0, 0) for id in range(n_self_play_games)]  # type: ignore
+    games = zsa0_rust.play_games(  # type: ignore
         reqs,
         self_play_batch_size,
         n_mcts_iterations,

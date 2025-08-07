@@ -6,9 +6,9 @@ import optuna
 import pytorch_lightning as pl
 from pytorch_lightning.callbacks import EarlyStopping
 
-from c4a0.training import SampleDataModule, TrainingGen
-from c4a0.nn import ConnectFourNet, ModelConfig
-from c4a0_rust import Sample  # type: ignore
+from zsa0.training import SampleDataModule, TrainingGen
+from zsa0.nn import ConnectFourNet, ModelConfig
+from zsa0_rust import Sample  # type: ignore
 
 
 def load_samples(base_dir: str, n_gens: int = 5) -> List[Sample]:

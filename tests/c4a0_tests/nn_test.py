@@ -1,8 +1,8 @@
 import pytest
 import torch
 
-from c4a0.c4 import N_COLS, N_ROWS, STARTING_POS
-from c4a0.nn import ConnectFourNet
+from zsa0.zs import N_COLS, N_ROWS, STARTING_POS
+from zsa0.nn import ConnectFourNet
 
 
 def test_random_nn_works():

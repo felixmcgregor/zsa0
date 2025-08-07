@@ -1,5 +1,4 @@
 #![allow(dead_code)]
-// mod c4r;
 mod zootopia;
 mod interactive_play;
 mod mcts;
@@ -20,7 +19,7 @@ use types::{GameMetadata, GameResult, Sample};
 /// the `lib.name` setting in the `Cargo.toml`, else Python will not be able to
 /// import the module.
 #[pymodule]
-fn c4a0_rust(_py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
+fn zsa0_rust(_py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
     env_logger::Builder::from_env(Env::default().default_filter_or("info")).init();
 
     m.add("N_COLS", Pos::N_COLS)?;

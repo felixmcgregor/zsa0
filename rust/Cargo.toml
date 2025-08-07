@@ -1,10 +1,10 @@
 [package]
-name = "c4a0_rust"
+name = "zsa0_rust"
 version = "0.1.0"
 edition = "2021"
 
 [lib]
-name = "c4a0_rust"
+name = "zsa0_rust"
 crate-type = ["cdylib"]
 
 [dependencies]
