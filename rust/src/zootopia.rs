@@ -1,431 +1,423 @@
 use core::fmt;
-use std::{array::from_fn, fmt::Display};
+use std::fmt::Display;
 
 use more_asserts::debug_assert_gt;
 use serde::{Deserialize, Serialize};
 
 use crate::types::{Policy, QValue};
 
-/// Connect four position.
-/// Internally consists of a u64 mask (bitmask representing whether a piece exists at a given
-/// location) and a u64 value (bitmask representing the color of the given piece).
-/// Bit indexing is specified by [Pos::_idx_mask_unsafe].
+/// Game state data structure matching the JSON format
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct GameState {
+    #[serde(rename = "TimeStamp")]
+    pub timestamp: String,
+    #[serde(rename = "Tick")]
+    pub tick: u32,
+    #[serde(rename = "Cells")]
+    pub cells: Vec<Cell>,
+    #[serde(rename = "Animals")]
+    pub animals: Vec<Animal>,
+    #[serde(rename = "Zookeepers")]
+    pub zookeepers: Vec<Zookeeper>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Cell {
+    #[serde(rename = "Content")]
+    pub content: u8,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Animal {
+    pub x: usize,
+    pub y: usize,
+    pub id: u32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Zookeeper {
+    pub x: usize,
+    pub y: usize,
+    pub id: u32,
+}
+
+/// Zootopia position representing the game state
 #[derive(Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct Pos {
-    mask: u64,
-    value: u64,
+    /// Grid dimensions - assuming square grid for now
+    width: usize,
+    height: usize,
+    /// Flattened grid of cell contents
+    cells: Vec<u8>,
+    /// Player position
+    player_x: usize,
+    player_y: usize,
+    /// Current tick/turn number
+    tick: u32,
+    /// Score
+    score: u32,
 }
 
-/// The oponnent/player token within a cell.
+/// Cell content values matching the C# enum
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
-pub enum CellValue {
-    Opponent = 0,
-    Player = 1,
+pub enum CellContent {
+    Empty = 0,
+    Wall = 1,
+    Pellet = 2,
+    ZookeeperSpawn = 3,
+    AnimalSpawn = 4,
+    PowerPellet = 5,
+    ChameleonCloak = 6,
+    Scavenger = 7,
+    BigMooseJuice = 8,
 }
 
-/// Possible terminal states of a connect four game.
+/// Possible terminal states of the zootopia game
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum TerminalState {
-    PlayerWin,
-    OpponentWin,
-    Draw,
+    Success,    // All pellets collected
+    Failure,    // Caught by zookeeper  
+    Timeout,    // Game timeout/draw
+    InProgress, // Game still going
 }
 
-/// The column for a given move (0..[Pos::N_COLS])
-pub type Move = usize;
+/// Valid moves in the game
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+pub enum Move {
+    Up = 0,
+    Down = 1,
+    Left = 2,
+    Right = 3,
+}
 
 impl Default for Pos {
     fn default() -> Self {
-        Pos { mask: 0, value: 0 }
+        Pos {
+            width: 20,  // Default grid size
+            height: 20,
+            cells: vec![0; 400], // 20x20 grid of empty cells
+            player_x: 10,
+            player_y: 10,
+            tick: 0,
+            score: 0,
+        }
     }
 }
 
 impl Pos {
-    pub const N_ROWS: usize = 6;
-    pub const N_COLS: usize = 7;
+    /// Default grid dimensions (can be overridden when loading from JSON)
+    pub const DEFAULT_WIDTH: usize = 20;
+    pub const DEFAULT_HEIGHT: usize = 20;
+    
+    /// For compatibility with Connect Four interface
+    pub const N_COLS: usize = Self::N_MOVES; // Map to number of moves for policy arrays
+    pub const N_ROWS: usize = Self::DEFAULT_HEIGHT; // Map to height for buffer calculations
+    
+    /// Number of possible moves (up, down, left, right)
+    pub const N_MOVES: usize = 4;
 
-    /// The number of channels in the numpy buffer (one per player)
-    pub const BUF_N_CHANNELS: usize = 2;
-    /// The length of a single channel (in # of f32s) of the numpy buffer
-    pub const BUF_CHANNEL_LEN: usize = Self::N_ROWS * Self::N_COLS;
+    /// The number of channels in the numpy buffer (grid state + player position + other features)
+    pub const BUF_N_CHANNELS: usize = 3; // grid content, player position, additional features
     /// The required length (in # of f32s) of the numpy buffer
-    pub const BUF_LEN: usize = Self::BUF_N_CHANNELS * Self::BUF_CHANNEL_LEN;
+    pub const BUF_LEN: usize = Self::BUF_N_CHANNELS * Self::DEFAULT_WIDTH * Self::DEFAULT_HEIGHT;
 
-    /// Plays a move in the given column from the perspective of the [CellValue::Player].
-    /// Returns a new position where the cell values are flipped.
-    /// Performs bounds and collision checing.
-    /// DOES NOT perform win checking.
-    pub fn make_move(&self, col: Move) -> Option<Pos> {
-        if col > Self::N_COLS {
-            return None;
-        }
-
-        for row in 0..Self::N_ROWS {
-            let idx = Self::_idx_mask_unsafe(row, col);
-            if (idx & self.mask) == 0 {
-                let mut ret = self.clone();
-                ret._set_piece_unsafe(row, col, Some(CellValue::Player));
-                return Some(ret.invert());
-            }
-        }
-        None
-    }
-
-    /// Returns the value of cell at the given position.
-    /// Performs bounds checking.
-    pub fn get(&self, row: usize, col: usize) -> Option<CellValue> {
-        if col > Self::N_COLS || row > Self::N_ROWS {
-            return None;
-        }
-        let idx = Self::_idx_mask_unsafe(row, col);
-
-        if (self.mask & idx) == 0 {
-            return None;
-        }
-
-        if (self.value & idx) == 0 {
-            Some(CellValue::Opponent)
+    /// Creates a new position from a JSON game state
+    pub fn from_game_state(game_state: &GameState) -> Self {
+        // Infer grid dimensions from the cells array length
+        let total_cells = game_state.cells.len();
+        let width = (total_cells as f64).sqrt() as usize;
+        let height = total_cells / width;
+        
+        let cells: Vec<u8> = game_state.cells.iter().map(|cell| cell.content).collect();
+        
+        // Find player position (assuming first animal is the player)
+        let (player_x, player_y) = if let Some(animal) = game_state.animals.first() {
+            (animal.x, animal.y)
         } else {
-            Some(CellValue::Player)
-        }
-    }
-
-    /// Returns the ply of the position or the number of moves that have been played.
-    /// Ply of 0 is the starting position.
-    pub fn ply(&self) -> usize {
-        u64::count_ones(self.mask).try_into().unwrap()
-    }
-
-    /// Mutably sets the given piece without any bounds or collision checking.
-    fn _set_piece_unsafe(&mut self, row: usize, col: usize, piece: Option<CellValue>) {
-        let idx_mask = Self::_idx_mask_unsafe(row, col);
-        match piece {
-            Some(CellValue::Opponent) => {
-                self.mask |= idx_mask;
-                self.value &= !idx_mask;
-            }
-            Some(CellValue::Player) => {
-                self.mask |= idx_mask;
-                self.value |= idx_mask;
-            }
-            None => {
-                self.mask &= !idx_mask;
-                self.value &= !idx_mask;
-            }
+            (width / 2, height / 2) // Default to center if no animals
         };
+
+        Pos {
+            width,
+            height,
+            cells,
+            player_x,
+            player_y,
+            tick: game_state.tick,
+            score: 0, // Initialize score to 0, could be calculated from collected pellets
+        }
     }
 
-    /// Returns a single bit for the given row and column.
-    const fn _idx_mask_unsafe(row: usize, col: usize) -> u64 {
-        let idx = row * Self::N_COLS + col;
-        0b1 << idx
-    }
+    /// Makes a move in the given direction
+    /// Returns a new position if the move is valid, None otherwise
+    pub fn make_move(&self, mov: Move) -> Option<Pos> {
+        let (new_x, new_y) = match mov {
+            Move::Up => (self.player_x, (self.player_y + self.height - 1) % self.height),
+            Move::Down => (self.player_x, (self.player_y + 1) % self.height),
+            Move::Left => ((self.player_x + self.width - 1) % self.width, self.player_y),
+            Move::Right => ((self.player_x + 1) % self.width, self.player_y),
+        };
 
-    /// Inverts the colors of this position.
-    pub fn invert(mut self) -> Pos {
-        self.value = !self.value;
-        self.value &= self.mask;
-        self
-    }
+        // Check if the move is valid (not into a wall or zookeeper spawn)
+        match self.get_cell_content(new_x, new_y) {
+            Some(CellContent::Wall) | Some(CellContent::ZookeeperSpawn) => return None,
+            _ => {}
+        }
 
-    /// Generates a horizontal win mask starting from the given cell.
-    const fn _gen_h_win_mask(row: usize, col: usize) -> u64 {
-        Self::_idx_mask_unsafe(row, col)
-            | Self::_idx_mask_unsafe(row, col + 1)
-            | Self::_idx_mask_unsafe(row, col + 2)
-            | Self::_idx_mask_unsafe(row, col + 3)
-    }
+        let mut new_pos = self.clone();
+        new_pos.player_x = new_x;
+        new_pos.player_y = new_y;
+        new_pos.tick += 1;
 
-    /// Generates a vertical win mask starting from the given cell.
-    const fn _gen_v_win_mask(row: usize, col: usize) -> u64 {
-        Self::_idx_mask_unsafe(row, col)
-            | Self::_idx_mask_unsafe(row + 1, col)
-            | Self::_idx_mask_unsafe(row + 2, col)
-            | Self::_idx_mask_unsafe(row + 3, col)
-    }
-
-    /// Generates a diagonal (top-left to bottom-right) win mask starting from the given cell.
-    const fn _gen_d1_win_mask(row: usize, col: usize) -> u64 {
-        Self::_idx_mask_unsafe(row, col)
-            | Self::_idx_mask_unsafe(row + 1, col + 1)
-            | Self::_idx_mask_unsafe(row + 2, col + 2)
-            | Self::_idx_mask_unsafe(row + 3, col + 3)
-    }
-
-    /// Generates a diagonal (bottom-left to top-right) win mask starting from the given cell.
-    const fn _gen_d2_win_mask(row: usize, col: usize) -> u64 {
-        Self::_idx_mask_unsafe(row, col)
-            | Self::_idx_mask_unsafe(row - 1, col + 1)
-            | Self::_idx_mask_unsafe(row - 2, col + 2)
-            | Self::_idx_mask_unsafe(row - 3, col + 3)
-    }
-
-    /// Represents the set of all possible wins.
-    /// Each item is a bitmask representing the required locations of consecutive pieces.
-    const WIN_MASKS: [u64; 69] = {
-        // Note rust doesn't support for loops in const functions so we have to resort to while:
-        // See: https://github.com/rust-lang/rust/issues/87575
-
-        let mut masks = [0u64; 69];
-        let mut index = 0;
-
-        // Horizontal wins
-        let mut row = 0;
-        while row < Self::N_ROWS {
-            let mut col = 0;
-            while col <= Self::N_COLS - 4 {
-                masks[index] = Self::_gen_h_win_mask(row, col);
-                index += 1;
-                col += 1;
+        // Handle pellet collection
+        if let Some(content) = self.get_cell_content(new_x, new_y) {
+            match content {
+                CellContent::Pellet => {
+                    new_pos.score += 3;
+                    new_pos.set_cell_content(new_x, new_y, CellContent::Empty);
+                }
+                CellContent::PowerPellet => {
+                    new_pos.score += 30;
+                    new_pos.set_cell_content(new_x, new_y, CellContent::Empty);
+                }
+                CellContent::ChameleonCloak => {
+                    new_pos.score += 1;
+                    new_pos.set_cell_content(new_x, new_y, CellContent::Empty);
+                }
+                CellContent::Scavenger => {
+                    new_pos.score += 100;
+                    new_pos.set_cell_content(new_x, new_y, CellContent::Empty);
+                }
+                CellContent::BigMooseJuice => {
+                    new_pos.score += 60;
+                    new_pos.set_cell_content(new_x, new_y, CellContent::Empty);
+                }
+                _ => {}
             }
-            row += 1;
         }
 
-        // Vertical wins
-        let mut col = 0;
-        while col < Self::N_COLS {
-            let mut row = 0;
-            while row <= Self::N_ROWS - 4 {
-                masks[index] = Self::_gen_v_win_mask(row, col);
-                index += 1;
-                row += 1;
+        Some(new_pos)
+    }
+
+    /// Gets the content of a cell at the given position
+    pub fn get_cell_content(&self, x: usize, y: usize) -> Option<CellContent> {
+        if x >= self.width || y >= self.height {
+            return None;
+        }
+        
+        let index = y * self.width + x;
+        if index >= self.cells.len() {
+            return None;
+        }
+
+        match self.cells[index] {
+            0 => Some(CellContent::Empty),
+            1 => Some(CellContent::Wall),
+            2 => Some(CellContent::Pellet),
+            3 => Some(CellContent::ZookeeperSpawn),
+            4 => Some(CellContent::AnimalSpawn),
+            5 => Some(CellContent::PowerPellet),
+            6 => Some(CellContent::ChameleonCloak),
+            7 => Some(CellContent::Scavenger),
+            8 => Some(CellContent::BigMooseJuice),
+            _ => Some(CellContent::Empty),
+        }
+    }
+
+    /// Sets the content of a cell at the given position
+    pub fn set_cell_content(&mut self, x: usize, y: usize, content: CellContent) {
+        if x >= self.width || y >= self.height {
+            return;
+        }
+        
+        let index = y * self.width + x;
+        if index >= self.cells.len() {
+            return;
+        }
+
+        self.cells[index] = content as u8;
+    }
+
+    /// Returns the current tick/turn number
+    pub fn ply(&self) -> usize {
+        self.tick as usize
+    }
+
+    /// Returns the current score
+    pub fn score(&self) -> u32 {
+        self.score
+    }
+
+    /// For compatibility with Connect Four interface - returns a sequence of moves
+    /// In Zootopia, this is not meaningful but we provide a stub implementation
+    pub fn to_moves(&self) -> Vec<crate::zootopia::Move> {
+        // For now, return an empty vector since Zootopia doesn't have a deterministic move sequence
+        vec![]
+    }
+
+    /// For compatibility with Connect Four interface - horizontal flip
+    /// In Zootopia this creates a horizontally mirrored version of the grid
+    pub fn flip_h(&self) -> Pos {
+        let mut flipped = self.clone();
+        
+        // Flip the grid horizontally
+        for y in 0..self.height {
+            for x in 0..self.width {
+                let flipped_x = self.width - 1 - x;
+                let original_content = self.get_cell_content(x, y);
+                if let Some(content) = original_content {
+                    flipped.set_cell_content(flipped_x, y, content);
+                }
             }
-            col += 1;
         }
+        
+        // Flip player position
+        flipped.player_x = self.width - 1 - self.player_x;
+        
+        flipped
+    }
 
-        // Diagonal (top-left to bottom-right) wins
-        row = 0;
-        while row <= Self::N_ROWS - 4 {
-            let mut col = 0;
-            while col <= Self::N_COLS - 4 {
-                masks[index] = Self::_gen_d1_win_mask(row, col);
-                index += 1;
-                col += 1;
-            }
-            row += 1;
-        }
-
-        // Diagonal (bottom-left to top-right) wins
-        row = 3;
-        while row < Self::N_ROWS {
-            let mut col = 0;
-            while col <= Self::N_COLS - 4 {
-                masks[index] = Self::_gen_d2_win_mask(row, col);
-                index += 1;
-                col += 1;
-            }
-            row += 1;
-        }
-
-        if index != 69 {
-            panic!("expected 69 win masks");
-        }
-        masks
-    };
-
-    /// Determines if the game is over, and if so, who won.
-    /// If the game is not over, returns None.
+    /// Determines if the game is over
     pub fn is_terminal_state(&self) -> Option<TerminalState> {
-        if self._is_terminal_for_player() {
-            Some(TerminalState::PlayerWin)
-        } else if self.clone().invert()._is_terminal_for_player() {
-            Some(TerminalState::OpponentWin)
-        } else if self.ply() == Self::N_COLS * Self::N_ROWS {
-            Some(TerminalState::Draw)
-        } else {
-            None
+        // Check if all pellets are collected (win condition)
+        let has_pellets = self.cells.iter().any(|&cell| {
+            matches!(cell, 2 | 5) // Pellet or PowerPellet
+        });
+
+        if !has_pellets {
+            return Some(TerminalState::Success);
         }
+
+        // For now, assume game continues (would need zookeeper logic for loss condition)
+        Some(TerminalState::InProgress)
     }
 
-    /// Determines if the current player has won.
-    fn _is_terminal_for_player(&self) -> bool {
-        let player_tokens = self.mask & self.value;
-        for win_mask in Self::WIN_MASKS {
-            if u64::count_ones(player_tokens & win_mask) == 4 {
-                return true;
-            }
-        }
-        false
+    /// Returns which moves are legal from the current position
+    pub fn legal_moves(&self) -> [bool; Self::N_MOVES] {
+        [
+            self.make_move(Move::Up).is_some(),
+            self.make_move(Move::Down).is_some(),
+            self.make_move(Move::Left).is_some(),
+            self.make_move(Move::Right).is_some(),
+        ]
     }
 
-    /// Returns the f32 terminal value of the position. The first value is with the ply penalty
-    /// and the second value is wwithout the ply penalty. Returns None if the game is not over.
-    pub fn terminal_value_with_ply_penalty(&self, c_ply_penalty: f32) -> Option<(QValue, QValue)> {
-        let ply_penalty_magnitude = c_ply_penalty * self.ply() as f32;
-        self.is_terminal_state().map(|t| match t {
-            // If the player wins, we apply a penalty to encourage shorter wins
-            TerminalState::PlayerWin => (1.0 - ply_penalty_magnitude, 1.0),
-            // If the player loses, we apply a penalty to encourage more drawn out games
-            TerminalState::OpponentWin => (-1.0 + ply_penalty_magnitude, -1.0),
-            // Drawn games do not have any ply penalty
-            TerminalState::Draw => (0.0, 0.0),
-        })
-    }
-
-    /// Indicates which moves (columns) are legal to play.
-    pub fn legal_moves(&self) -> [bool; Self::N_COLS] {
-        let top_row = Self::N_ROWS - 1;
-        from_fn(|col| self.get(top_row, col).is_none())
-    }
-
-    /// Mask the policy logprobs by setting illegal moves to [f32::NEG_INFINITY].
+    /// Mask the policy logprobs by setting illegal moves to f32::NEG_INFINITY
     pub fn mask_policy(&self, policy_logprobs: &mut Policy) {
         let legal_moves = self.legal_moves();
         debug_assert_gt!(
-            { legal_moves.iter().filter(|&&m| m).count() },
+            legal_moves.iter().filter(|&&legal| legal).count(),
             0,
-            "no legal moves in leaf node"
+            "At least one move must be legal"
         );
 
-        // Mask policy for illegal moves and softmax
-        for mov in 0..Pos::N_COLS {
+        // Mask policy for illegal moves
+        for mov in 0..Self::N_MOVES {
             if !legal_moves[mov] {
                 policy_logprobs[mov] = f32::NEG_INFINITY;
             }
         }
     }
 
-    /// Returns a new [Pos] that is horizonitally flipped.
-    pub fn flip_h(&self) -> Pos {
-        let mut ret = Pos::default();
-        (0..Pos::N_ROWS).for_each(|row| {
-            (0..Pos::N_COLS).for_each(|col| {
-                if let Some(piece) = self.get(row, col) {
-                    ret._set_piece_unsafe(row, Pos::N_COLS - 1 - col, Some(piece));
-                }
-            })
-        });
-        ret
-    }
-
-    /// Returns a list of moves that can be played to reach the given position.
-    /// Note this might not be the actual move sequence that was played.
-    /// This move sequence can be used to pass our [Pos] states to external solvers for evaluation.
-    pub fn to_moves(&self) -> Vec<Move> {
-        self.to_moves_rec(self.clone(), Vec::new())
-            .expect(format!("failed to generate moves for pos:\n{}", self).as_str())
-            .into_iter()
-            .rev()
-            .collect()
-    }
-
-    /// Returns a [Pos] from a list of moves. Panics if the moves are invalid.
-    pub fn from_moves(moves: &[Move]) -> Pos {
-        let mut pos = Pos::default();
-        for &mov in moves {
-            pos = pos.make_move(mov).unwrap();
-        }
-        pos
-    }
-
-    /// Helper function for [Self::to_moves] that attempts to recursively remove pieces from the top
-    /// of the `temp` board until it is empty, then returns the [Move]s representing the removals.
-    ///
-    /// We can't remove pieces in a greedy way as that might result in "trapped" pieces. As such,
-    /// we have to recursively backtrack and try removing pieces in a different order until we find
-    /// an order that results in an empty board.
-    fn to_moves_rec(&self, temp: Pos, moves: Vec<Move>) -> Option<Vec<Move>> {
-        if temp.ply() == 0 {
-            return Some(moves);
-        }
-
-        // Whether we are remove player 0's piece or player 1's piece
-        let removing_p0_piece = (self.ply() % 2 == 0) ^ (temp.ply() % 2 == 0);
-
-        'next_col: for col in 0..Self::N_COLS {
-            'next_row: for row in (0..Self::N_ROWS).rev() {
-                let self_piece = self.get(row, col);
-                let temp_piece = temp.get(row, col);
-                let should_remove_piece = if removing_p0_piece {
-                    (self_piece, temp_piece) == (Some(CellValue::Player), Some(CellValue::Player))
-                } else {
-                    (self_piece, temp_piece)
-                        == (Some(CellValue::Opponent), Some(CellValue::Opponent))
-                };
-
-                if should_remove_piece {
-                    let mut temp = temp.clone();
-                    temp._set_piece_unsafe(row, col, None);
-                    let mut moves = moves.clone();
-                    moves.push(col);
-
-                    // Recursively try to continue removing pieces, or if that fails,
-                    // try the next column instead.
-                    if let Some(ret) = self.to_moves_rec(temp, moves) {
-                        return Some(ret);
-                    } else {
-                        continue 'next_col;
-                    }
-                } else if temp_piece.is_none() {
-                    // Already removed this piece from temp, continue to next row down
-                    continue 'next_row;
-                } else {
-                    // No more eligible pieces in this column, continue to the next column
-                    continue 'next_col;
-                }
+    /// Returns the terminal value with ply penalty, returns None if game is not over
+    pub fn terminal_value_with_ply_penalty(&self, c_ply_penalty: f32) -> Option<(QValue, QValue)> {
+        match self.is_terminal_state() {
+            Some(TerminalState::Success) => {
+                let q_no_penalty = 1.0;
+                let q_penalty = q_no_penalty - (self.ply() as f32 * c_ply_penalty);
+                Some((q_penalty.clamp(-1.0, 1.0), q_no_penalty))
             }
+            Some(TerminalState::Failure) => Some((-1.0, -1.0)),
+            Some(TerminalState::Timeout) => Some((0.0, 0.0)),
+            Some(TerminalState::InProgress) => None,
+            None => None,
         }
-
-        // Failed to successfully remove all pieces (i.e. stuck pieces remain).
-        // Return None to enable the caller to backtrack.
-        None
     }
 
-    /// Writes the position to a buffer intended to be interpreted as a [numpy] array.
-    /// The final array is of shape (2, 6, 7) where the first dim represents player/opponent,
-    /// the second dim represents rows, and the final dim represents columns. The data is written
-    /// in row-major format.
+    /// For compatibility with Connect Four interface - invert the position perspective
+    /// In Zootopia this doesn't change the position since it's single-player
+    pub fn invert(self) -> Pos {
+        self // No-op for single player game
+    }
+
+    /// Returns the player position as a tuple (x, y)
+    pub fn player_position(&self) -> (usize, usize) {
+        (self.player_x, self.player_y)
+    }
+
+    /// Returns the dimensions of the grid as (width, height)
+    pub fn dimensions(&self) -> (usize, usize) {
+        (self.width, self.height)
+    }
+
+    /// Writes the position to a buffer for neural network input
     pub fn write_numpy_buffer(&self, buf: &mut [f32]) {
         assert_eq!(buf.len(), Self::BUF_LEN);
-        (0..Self::BUF_N_CHANNELS).for_each(|player| {
-            (0..Self::N_ROWS).for_each(|row| {
-                (0..Self::N_COLS).for_each(|col| {
-                    let idx = player * Self::BUF_CHANNEL_LEN + row * Self::N_COLS + col;
-                    buf[idx] = match self.get(row, col) {
-                        Some(CellValue::Player) if player == 0 => 1.0,
-                        Some(CellValue::Opponent) if player == 1 => 1.0,
-                        _ => 0.0,
-                    };
-                });
-            });
-        })
+        
+        let channel_size = self.width * self.height;
+        
+        // Channel 0: Grid content (normalized)
+        for i in 0..self.cells.len() {
+            buf[i] = self.cells[i] as f32 / 8.0; // Normalize cell content values
+        }
+        
+        // Channel 1: Player position
+        for i in 0..channel_size {
+            buf[channel_size + i] = 0.0;
+        }
+        let player_index = self.player_y * self.width + self.player_x;
+        if player_index < channel_size {
+            buf[channel_size + player_index] = 1.0;
+        }
+        
+        // Channel 2: Additional features (score, tick, etc.)
+        for i in 0..channel_size {
+            buf[2 * channel_size + i] = self.score as f32 / 1000.0; // Normalized score
+        }
+    }
+
+    /// For compatibility with Connect Four interface - creates position from move sequence
+    /// In Zootopia this creates a simple test position
+    pub fn from_moves(moves: &[crate::zootopia::Move]) -> Pos {
+        let mut pos = Pos::default();
+        for &mov in moves {
+            if let Some(new_pos) = pos.make_move(mov) {
+                pos = new_pos;
+            }
+        }
+        pos
     }
 }
 
 impl Display for Pos {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let mut ret: Vec<String> = Vec::with_capacity(Self::N_ROWS);
-        for row in (0..Self::N_ROWS).rev() {
-            let mut s = String::with_capacity(Pos::N_COLS);
-            for col in 0..Self::N_COLS {
-                let p = match self.get(row, col) {
-                    Some(CellValue::Player) => "🔴",
-                    Some(CellValue::Opponent) => "🔵",
-                    None => "⚫",
+        let mut result = String::new();
+        
+        for y in 0..self.height {
+            for x in 0..self.width {
+                let char = if x == self.player_x && y == self.player_y {
+                    'P' // Player
+                } else {
+                    // ⚫🔵🔴
+                    match self.get_cell_content(x, y) {
+                        Some(CellContent::Empty) => ' ',
+                        Some(CellContent::Wall) => '#',
+                        Some(CellContent::Pellet) => '•',
+                        Some(CellContent::ZookeeperSpawn) => 'Z',
+                        Some(CellContent::AnimalSpawn) => '🔴',
+                        Some(CellContent::PowerPellet) => 'P',
+                        Some(CellContent::ChameleonCloak) => 'C',
+                        Some(CellContent::Scavenger) => '🔵',
+                        Some(CellContent::BigMooseJuice) => 'M',
+                        None => '?',
+                    }
                 };
-                s.push_str(p);
+                result.push(char);
             }
-            ret.push(s);
+            result.push('\n');
         }
-        let ret = ret.join("\n");
-        write!(f, "{}", ret)
-    }
-}
-
-impl From<&str> for Pos {
-    fn from(s: &str) -> Self {
-        let mut pos = Pos::default();
-        for (row, line) in s.lines().rev().enumerate() {
-            for (col, c) in line.chars().enumerate() {
-                let cell_value = match c {
-                    '🔴' => CellValue::Player,
-                    '🔵' => CellValue::Opponent,
-                    _ => continue,
-                };
-                pos._set_piece_unsafe(row, col, Some(cell_value));
-            }
-        }
-        pos
+        
+        write!(f, "{}", result)
     }
 }
 
@@ -433,222 +425,164 @@ impl fmt::Debug for Pos {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "{}\nmask:  {:064b}\nvalue: {:064b}",
-            self.to_string(),
-            self.mask,
-            self.value
+            "Pos {{ width: {}, height: {}, player: ({}, {}), tick: {}, score: {} }}",
+            self.width, self.height, self.player_x, self.player_y, self.tick, self.score
         )
-    }
-}
-
-impl From<&Vec<Move>> for Pos {
-    fn from(moves: &Vec<Move>) -> Self {
-        let mut pos = Pos::default();
-        for &mov in moves {
-            pos = pos.make_move(mov).unwrap();
-        }
-        pos
     }
 }
 
 #[cfg(test)]
 pub mod tests {
     use super::*;
-    use proptest::prelude::*;
-
-    // Test helpers for Pos
-    impl Pos {
-        fn test_move(&self, col: usize) -> Pos {
-            self.make_move(col).unwrap()
-        }
-
-        fn test_moves(self, cols: &[usize]) -> Pos {
-            let mut pos = self;
-            for col in cols {
-                pos = pos.test_move(*col)
-            }
-            pos
-        }
-    }
 
     #[test]
-    fn playing_moves_works() {
+    fn test_basic_movement() {
         let mut pos = Pos::default();
-        for col in 0..Pos::N_COLS {
-            for row in 0..Pos::N_ROWS {
-                pos = pos.test_move(col);
-                assert_eq!(pos.get(row, col), Some(CellValue::Opponent));
-            }
-
-            // Playing here should overflow column
-            assert!(!pos.legal_moves()[col]);
-            assert_eq!(pos.make_move(col), None);
-        }
+        
+        // Test moving right
+        let new_pos = pos.make_move(Move::Right).unwrap();
+        assert_eq!(new_pos.player_position(), (11, 10));
+        
+        // Test moving up
+        let new_pos = pos.make_move(Move::Up).unwrap();
+        assert_eq!(new_pos.player_position(), (10, 9));
     }
 
     #[test]
-    fn row_win() {
-        let pos = Pos::from_moves(&[0, 0, 1, 1, 2, 2, 3]);
-
-        // Because the board is inverted, the last move results in the opponent winning
-        assert_eq!(pos.is_terminal_state(), Some(TerminalState::OpponentWin));
-    }
-
-    #[test]
-    fn col_win() {
-        let pos = Pos::from_moves(&[6, 0, 6, 0, 6, 0, 6]);
-        assert_eq!(pos.is_terminal_state(), Some(TerminalState::OpponentWin));
-    }
-
-    #[test]
-    fn draw() {
-        let pos = Pos::from_moves(&[
-            // Fill first three rows with alternating moves
-            0, 1, 2, 3, 4, 5, // First row
-            0, 1, 2, 3, 4, 5, // Second row
-            0, 1, 2, 3, 4, 5, // Third row
-            // Fill fourth and fifth rows in reverse order to continue pattern
-            5, 4, 3, 2, 1, 0, // Fourth row
-            5, 4, 3, 2, 1, 0, // Fifth row
-            5, 4, 3, 2, 1, 0, // Sixth row
-            // Fill the last column (column 6) to complete all rows
-            6, 6, 6, 6, 6, 6, // Last column full
-        ]);
-
-        // Verify if the terminal state is a draw
-        assert_eq!(pos.is_terminal_state(), Some(TerminalState::Draw));
-    }
-
-    #[test]
-    fn to_str() {
-        let pos = Pos::from_moves(&[
-            0, 1, 2, 3, 4, 5, // First row
-            0, 1, 2, 3, 4, 5, // Second row
-            0, 1, 2, 3, 4, 5, // Third row
-            5, 4, 3, 2, 1, 0, // Fourth row
-            5, 4, 3, 2, 1, 0, // Fifth row
-            5, 4, 3, 2, 1, 0, // Sixth row
-            6, 6, 6, 6, 6, 6, // Last column full
-        ]);
-
-        let expected = [
-            "🔵🔴🔵🔴🔵🔴🔵",
-            "🔵🔴🔵🔴🔵🔴🔴",
-            "🔵🔴🔵🔴🔵🔴🔵",
-            "🔴🔵🔴🔵🔴🔵🔴",
-            "🔴🔵🔴🔵🔴🔵🔵",
-            "🔴🔵🔴🔵🔴🔵🔴",
-        ]
-        .join("\n");
-
-        assert_eq!(pos.to_string(), expected);
-        assert_eq!(Pos::from(expected.as_str()), pos);
-    }
-
-    #[test]
-    fn legal_moves() {
+    fn test_wall_collision() {
         let mut pos = Pos::default();
-        assert_legal_moves(&pos, "OOOOOOO");
-
-        pos = pos.test_moves(&[
-            0, 1, 2, 3, 4, 5, // First row
-            0, 1, 2, 3, 4, 5, // Second row
-            0, 1, 2, 3, 4, 5, // Third row
-            5, 4, 3, 2, 1, 0, // Fourth row
-            5, 4, 3, 2, 1, 0, // Fifth row
-        ]);
-
-        // Fill up top row
-        assert_legal_moves(&pos, "OOOOOOO");
-        pos = pos.test_move(5);
-        assert_legal_moves(&pos, "OOOOOXO");
-        pos = pos.test_move(4);
-        assert_legal_moves(&pos, "OOOOXXO");
-        pos = pos.test_move(3);
-        assert_legal_moves(&pos, "OOOXXXO");
-        pos = pos.test_move(2);
-        assert_legal_moves(&pos, "OOXXXXO");
-        pos = pos.test_move(1);
-        assert_legal_moves(&pos, "OXXXXXO");
-        pos = pos.test_move(0);
-        assert_legal_moves(&pos, "XXXXXXO");
-
-        // Fill up last column
-        pos = pos.test_moves(&[6, 6, 6, 6, 6, 6]);
-        assert_legal_moves(&pos, "XXXXXXX");
+        // Set a wall to the right of the player
+        pos.set_cell_content(11, 10, CellContent::Wall);
+        
+        // Moving right should fail
+        assert!(pos.make_move(Move::Right).is_none());
     }
 
-    fn assert_legal_moves(pos: &Pos, s: &str) {
+    #[test]
+    fn test_pellet_collection() {
+        let mut pos = Pos::default();
+        // Place a pellet to the right of the player
+        pos.set_cell_content(11, 10, CellContent::Pellet);
+        
+        let new_pos = pos.make_move(Move::Right).unwrap();
+        assert_eq!(new_pos.score(), 3); // Pellet gives 3 points
+        assert_eq!(new_pos.get_cell_content(11, 10), Some(CellContent::Empty));
+    }
+
+    #[test]
+    fn test_legal_moves() {
+        let pos = Pos::default();
         let legal_moves = pos.legal_moves();
-        for mov in 0..Pos::N_COLS {
-            if legal_moves[mov] && s[mov..mov + 1] != *"O" {
-                assert!(
-                    false,
-                    "expected col {} to be legal in game\n\n{}",
-                    mov,
-                    pos.to_string()
-                );
-            } else if !legal_moves[mov] && s[mov..mov + 1] != *"X" {
-                assert!(
-                    false,
-                    "expected col {} to be illegal in game\n\n{}",
-                    mov,
-                    pos.to_string()
-                );
-            }
-        }
+        
+        // All moves should be legal from the center of an empty grid
+        assert!(legal_moves.iter().all(|&legal| legal));
     }
 
     #[test]
-    fn flip_h_symmetrical() {
-        let pos = Pos::from_moves(&[3, 3, 3]);
-        let flipped = pos.flip_h();
-        assert_eq!(pos, flipped);
-        assert_eq!(pos, flipped.flip_h());
+    fn test_display() {
+        let pos = Pos::default();
+        let display_string = format!("{}", pos);
+        
+        // Should contain the player character 'P'
+        assert!(display_string.contains('P'));
     }
 
-    prop_compose! {
-        /// Strategy to generate random connect four positions. We start with a Vec of random
-        /// columns to play in and play them in order. If any moves are invalid, we ignore them.
-        /// This allows proptest's shrinking to undo moves to find the smallest failing case.
-        pub fn random_pos()(moves in prop::collection::vec(0..Pos::N_COLS, 0..500)) -> Pos {
-            let mut pos = Pos::default();
-
-            for &mov in &moves {
-                if pos.is_terminal_state().is_some() {
-                    break
-                }
-
-                if pos.legal_moves()[mov] {
-                    pos = pos.test_move(mov);
-                }
-            }
-
-            pos
-        }
+    #[test]
+    fn test_from_game_state_json() {
+        // Small 4x4 grid, 1 animal, 1 pellet, 1 wall, 1 zookeeper
+        let json = r#"{
+            "TimeStamp": "2025-08-07T00:00:00Z",
+            "Tick": 1,
+            "Cells": [
+                {"Content": 0}, {"Content": 1}, {"Content": 2}, {"Content": 3},
+                {"Content": 0}, {"Content": 0}, {"Content": 0}, {"Content": 0},
+                {"Content": 0}, {"Content": 0}, {"Content": 0}, {"Content": 0},
+                {"Content": 0}, {"Content": 0}, {"Content": 0}, {"Content": 0}
+            ],
+            "Animals": [{"x": 0, "y": 0, "id": 1}],
+            "Zookeepers": [{"x": 3, "y": 0, "id": 1}]
+        }"#;
+        let game_state: GameState = serde_json::from_str(json).unwrap();
+        let pos = Pos::from_game_state(&game_state);
+        assert_eq!(pos.width, 4);
+        assert_eq!(pos.height, 4);
+        assert_eq!(pos.player_x, 0);
+        assert_eq!(pos.player_y, 0);
+        assert_eq!(pos.get_cell_content(1, 0), Some(CellContent::Wall));
+        assert_eq!(pos.get_cell_content(2, 0), Some(CellContent::Pellet));
+        assert_eq!(pos.get_cell_content(3, 0), Some(CellContent::ZookeeperSpawn));
     }
 
-    proptest! {
-        /// Double flipping the position should result in the same position.
-        #[test]
-        fn flip_h(pos in random_pos()) {
-            let flipped = pos.flip_h();
-            assert_eq!(pos, flipped.flip_h());
+    #[test]
+    fn test_from_game_state_json_small() {
+        // Small 3x3 grid, 1 animal, 1 pellet, 1 wall, 1 zookeeper
+        let json = r#"{
+            "TimeStamp": "2025-08-07T00:00:00Z",
+            "Tick": 1,
+            "Cells": [
+                {"Content": 0}, {"Content": 1}, {"Content": 2},
+                {"Content": 3}, {"Content": 0}, {"Content": 0},
+                {"Content": 0}, {"Content": 0}, {"Content": 0}
+            ],
+            "Animals": [{"x": 0, "y": 0, "id": 1}],
+            "Zookeepers": [{"x": 1, "y": 0, "id": 1}]
+        }"#;
+        let game_state: crate::zootopia::GameState = serde_json::from_str(json).unwrap();
+        let pos = crate::zootopia::Pos::from_game_state(&game_state);
+        assert_eq!(pos.width, 3);
+        assert_eq!(pos.height, 3);
+        assert_eq!(pos.player_x, 0);
+        assert_eq!(pos.player_y, 0);
+        assert_eq!(pos.get_cell_content(1, 0), Some(crate::zootopia::CellContent::Wall));
+        assert_eq!(pos.get_cell_content(2, 0), Some(crate::zootopia::CellContent::Pellet));
+        assert_eq!(pos.get_cell_content(0, 1), Some(crate::zootopia::CellContent::ZookeeperSpawn));
+    }
+    
+    #[test]
+    fn debug_wall_avoidance() {
+        // Test the wall avoidance case from failing MCTS test
+        let json = r#"{
+            "TimeStamp": "2025-08-07T00:00:00Z",
+            "Tick": 1,
+            "Cells": [
+                {"Content": 0}, {"Content": 1}, {"Content": 0},
+                {"Content": 0}, {"Content": 0}, {"Content": 0},
+                {"Content": 0}, {"Content": 0}, {"Content": 0}
+            ],
+            "Animals": [{"x": 0, "y": 0, "id": 1}],
+            "Zookeepers": []
+        }"#;
+        
+        let game_state: GameState = serde_json::from_str(json).unwrap();
+        let pos = Pos::from_game_state(&game_state);
+        
+        println!("Position: {:?}", pos);
+        println!("Player position: {:?}", pos.player_position());
+        println!("Grid dimensions: {:?}", pos.dimensions());
+        
+        // Check what's at cell (1, 0) - should be a wall
+        println!("Cell (1, 0): {:?}", pos.get_cell_content(1, 0));
+        
+        // Test each move
+        for (i, move_name) in ["Up", "Down", "Left", "Right"].iter().enumerate() {
+            let mov = match i {
+                0 => Move::Up,
+                1 => Move::Down,
+                2 => Move::Left,
+                3 => Move::Right,
+                _ => unreachable!(),
+            };
+            
+            let can_move = pos.make_move(mov).is_some();
+            println!("Can move {}: {}", move_name, can_move);
         }
-
-        /// Converting a position to a string and back should result in the same position.
-        #[test]
-        fn to_from_string(pos in random_pos()) {
-            let s = pos.to_string();
-            assert_eq!(Pos::from(s.as_str()), pos);
-        }
-
-        /// Generating moves from a position and converting them back should result in the same pos.
-        #[test]
-        fn to_moves(pos in random_pos()) {
-            let moves = pos.to_moves();
-            let generated = Pos::from(&moves);
-            assert_eq!(generated, pos);
-        }
+        
+        // Check legal moves array
+        let legal_moves = pos.legal_moves();
+        println!("Legal moves: {:?}", legal_moves);
+        
+        // Test right move specifically (should fail due to wall)
+        assert!(pos.make_move(Move::Right).is_none(), "Right move should be blocked by wall");
+        assert!(!legal_moves[3], "Right move should be illegal");
     }
 }

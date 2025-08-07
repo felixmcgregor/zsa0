@@ -3,7 +3,7 @@ use std::io::{stdout, Stdout};
 use std::time::Duration;
 
 use ratatui::layout::{Constraint, Layout};
-use ratatui::style::{Color, Style};
+use ratatui::style::Style;
 use ratatui::widgets::{Bar, BarChart, BarGroup, Padding};
 use ratatui::{
     backend::CrosstermBackend,
@@ -21,7 +21,7 @@ use ratatui::{
     Terminal,
 };
 
-use crate::c4r::{CellValue, Pos, TerminalState};
+use crate::zootopia::{Pos, TerminalState};
 use crate::interactive_play::{InteractivePlay, Snapshot};
 use crate::types::{EvalPosT, QValue};
 
@@ -98,20 +98,18 @@ impl<E: EvalPosT + Send + Sync + 'static> App<E> {
             KeyCode::Char('q') => self.exit = true,
             KeyCode::Char('t') => self.game.increase_mcts_iters(1),
             KeyCode::Char('u') => self.game.undo_move(),
-            KeyCode::Char('1') => self.game.make_move(0),
-            KeyCode::Char('2') => self.game.make_move(1),
-            KeyCode::Char('3') => self.game.make_move(2),
-            KeyCode::Char('4') => self.game.make_move(3),
-            KeyCode::Char('5') => self.game.make_move(4),
-            KeyCode::Char('6') => self.game.make_move(5),
-            KeyCode::Char('7') => self.game.make_move(6),
+            // Directional movement controls for Zootopia
+            KeyCode::Up | KeyCode::Char('w') => self.game.make_move(crate::zootopia::Move::Up),
+            KeyCode::Down | KeyCode::Char('s') => self.game.make_move(crate::zootopia::Move::Down),
+            KeyCode::Left | KeyCode::Char('a') => self.game.make_move(crate::zootopia::Move::Left),
+            KeyCode::Right | KeyCode::Char('d') => self.game.make_move(crate::zootopia::Move::Right),
             _ => {}
         };
     }
 }
 
 fn draw_app(snapshot: &Snapshot, rect: Rect, buf: &mut Buffer) {
-    let title = Title::from(" c4a0 - Connect Four AlphaZero ".bold());
+    let title = Title::from(" zta0 - Zootopia Alpha-Zero ".bold());
     let outer_block = Block::bordered()
         .title(title.alignment(Alignment::Center))
         .padding(Padding::horizontal(1))
@@ -133,15 +131,13 @@ fn draw_app(snapshot: &Snapshot, rect: Rect, buf: &mut Buffer) {
 }
 
 fn draw_game_and_evals(snapshot: &Snapshot, rect: Rect, buf: &mut Buffer) {
-    let isp0 = snapshot.pos.ply() % 2 == 0;
+    let _isp0 = snapshot.pos.ply() % 2 == 0;
     let to_play = match snapshot.pos.is_terminal_state() {
-        Some(TerminalState::PlayerWin) if isp0 => vec![" Blue".blue(), " won".into()],
-        Some(TerminalState::PlayerWin) => vec![" Red".red(), " won".into()],
-        Some(TerminalState::OpponentWin) if isp0 => vec![" Blue".blue(), " won".into()],
-        Some(TerminalState::OpponentWin) => vec![" Red".red(), " won".into()],
-        Some(TerminalState::Draw) => vec![" Draw".gray()],
-        None if isp0 => vec![" Red".red(), " to play".into()],
-        None => vec![" Blue".blue(), " to play".into()],
+        Some(TerminalState::Success) => vec![" Animal".green(), " escaped!".into()],
+        Some(TerminalState::Failure) => vec![" Caught by".red(), " zookeeper!".into()],
+        Some(TerminalState::Timeout) => vec![" Game".gray(), " timeout".into()],
+        Some(TerminalState::InProgress) => vec![" Animal".green(), " turn".into()],
+        None => vec![" Animal".green(), " turn".into()],
     };
 
     let block = Block::bordered()
@@ -160,117 +156,37 @@ fn draw_game_and_evals(snapshot: &Snapshot, rect: Rect, buf: &mut Buffer) {
 }
 
 fn draw_game_grid(pos: &Pos, rect: Rect, buf: &mut Buffer) {
-    let cell_width = 5;
-    let cell_height = 3;
-    for row in 0..Pos::N_ROWS {
-        for col in 0..Pos::N_COLS {
+    let cell_width = 3;
+    let cell_height = 1;
+    let (width, height) = pos.dimensions();
+    for y in 0..height {
+        for x in 0..width {
             let cell_rect = Rect::new(
-                rect.left() + (col as u16 * cell_width),
-                rect.top() + (row as u16 * cell_height),
+                rect.left() + (x as u16 * cell_width),
+                rect.top() + (y as u16 * cell_height),
                 cell_width,
                 cell_height,
             )
             .intersection(rect);
-            draw_game_cell(
-                pos.get(Pos::N_ROWS - row - 1, col),
-                row,
-                col,
-                cell_rect,
-                buf,
-            );
-        }
-    }
-
-    // Labels below grid
-    for col in 0..Pos::N_COLS {
-        let label_rect = Rect::new(
-            rect.left() + (col as u16 * cell_width),
-            rect.top() + (Pos::N_ROWS as u16 * cell_height) + 1,
-            cell_width,
-            cell_height,
-        );
-        Paragraph::new(format!("{}", col + 1))
-            .centered()
-            .bold()
-            .render(label_rect, buf);
-    }
-}
-
-fn draw_game_cell(value: Option<CellValue>, row: usize, col: usize, rect: Rect, buf: &mut Buffer) {
-    let bg_style = match value {
-        Some(CellValue::Player) => Style::default().bg(Color::Red),
-        Some(CellValue::Opponent) => Style::default().bg(Color::Blue),
-        None => Style::default(),
-    };
-    for y in (rect.top() + 1)..rect.bottom() {
-        for x in (rect.left() + 1)..rect.right() {
-            buf.get_mut(x, y).set_style(bg_style);
-        }
-    }
-
-    let border_style = Style::default().fg(Color::White);
-    let mut set_border = |x, y, ch| {
-        buf.get_mut(x, y).set_char(ch).set_style(border_style);
-    };
-
-    // Draw horizontal top borders
-    for x in rect.left()..rect.right() {
-        set_border(x, rect.top(), '─');
-    }
-
-    // Draw vertical left borders
-    for y in rect.top()..rect.bottom() {
-        set_border(rect.left(), y, '│');
-    }
-
-    // Top left corners
-    set_border(
-        rect.left(),
-        rect.top(),
-        match (row, col) {
-            (0, 0) => '┌',
-            (0, _c) => '┬',
-            (_r, 0) => '├',
-            _ => '┼',
-        },
-    );
-
-    if row == Pos::N_ROWS - 1 {
-        // Draw horizontal bottom borders
-        for x in rect.left()..rect.right() {
-            set_border(x, rect.bottom(), '─');
-        }
-
-        // Bottom left corners
-        set_border(
-            rect.left(),
-            rect.bottom(),
-            match col {
-                0 => '└',
-                _ => '┴',
-            },
-        )
-    }
-
-    if col == Pos::N_COLS - 1 {
-        // Draw vertical right borders
-        for y in rect.top()..rect.bottom() {
-            set_border(rect.right(), y, '│');
-        }
-
-        // Top right corners
-        set_border(
-            rect.right(),
-            rect.top(),
-            match row {
-                0 => '┐',
-                _ => '┤',
-            },
-        );
-
-        // Single bottom right corner
-        if row == Pos::N_ROWS - 1 {
-            set_border(rect.right(), rect.bottom(), '┘');
+            let cell_char = if (x, y) == pos.player_position() {
+                'P'
+            } else {
+                match pos.get_cell_content(x, y) {
+                    Some(crate::zootopia::CellContent::Empty) => ' ',
+                    Some(crate::zootopia::CellContent::Wall) => '#',
+                    Some(crate::zootopia::CellContent::Pellet) => '•',
+                    Some(crate::zootopia::CellContent::ZookeeperSpawn) => 'Z',
+                    Some(crate::zootopia::CellContent::AnimalSpawn) => 'A',
+                    Some(crate::zootopia::CellContent::PowerPellet) => 'O',
+                    Some(crate::zootopia::CellContent::ChameleonCloak) => 'C',
+                    Some(crate::zootopia::CellContent::Scavenger) => 'S',
+                    Some(crate::zootopia::CellContent::BigMooseJuice) => 'M',
+                    None => '?',
+                }
+            };
+            Paragraph::new(cell_char.to_string())
+                .centered()
+                .render(cell_rect, buf);
         }
     }
 }
@@ -323,13 +239,14 @@ fn draw_policy(snapshot: &Snapshot, rect: Rect, buf: &mut Buffer) {
     ]);
 
     let policy_max = 1000u64;
+    let move_labels = ["↑", "↓", "←", "→"]; // Up, Down, Left, Right
     let bars = snapshot
         .policy
         .iter()
         .enumerate()
         .map(|(i, p)| {
             Bar::default()
-                .label(format!("{}", i + 1).into())
+                .label(move_labels[i].into())
                 .value((p * (policy_max as f32)) as u64)
                 .text_value(format!("{:.2}", p)[1..].into())
         })
@@ -354,7 +271,7 @@ fn draw_policy(snapshot: &Snapshot, rect: Rect, buf: &mut Buffer) {
 
 fn draw_instructions(rect: Rect, buf: &mut Buffer) {
     let instruction_text = vec![
-        Line::from(vec!["<1-7>".blue().bold(), " Play Move".into()]),
+        Line::from(vec!["<Arrow Keys/WASD>".blue().bold(), " Move animal".into()]),
         Line::from(vec!["<B>".blue().bold(), " Play the best move".into()]),
         Line::from(vec!["<R>".blue().bold(), " Play a random move".into()]),
         Line::from(vec!["<M>".blue().bold(), " More MCTS iterations".into()]),

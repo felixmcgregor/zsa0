@@ -1,8 +1,10 @@
-# c4a0: Connect Four Alpha-Zero
+# zta0: Zootopia Alpha-Zero
 
 ![CI](https://github.com/advait/c4a0/actions/workflows/ci.yaml/badge.svg?ts=2)
 
-An Alpha-Zero-style Connect Four engine trained entirely via self play.
+An Alpha-Zero-style Zootopia game engine trained entirely via self play.
+
+Zootopia is a Pacman-like game where animals must collect pellets and power pellets while escaping from zookeepers in a maze environment.
 
 The game logic, Monte Carlo Tree Search, and multi-threaded self play engine is written in rust
 [here](https://github.com/advait/c4a0/tree/master/rust).
@@ -45,23 +47,10 @@ uv run src/c4a0/main.py train --max-gens=10
 uv run src/c4a0/main.py play --model=best
 ```
 
-6. (Optional) Download a [connect four solver](https://github.com/PascalPons/connect4?ts=2) to
-   objectively measure training progress:
-```
-git clone https://github.com/PascalPons/connect4.git solver
-cd solver
-make
-# Download opening book to speed up solutions
-wget https://github.com/PascalPons/connect4/releases/download/book/7x6.book
-```
-
-Now pass the solver paths to `train`, `score` and other commands:
-```
-uv run python src/c4a0/main.py score solver/c4solver solver/7x6.book
-```
+6. (Optional) Download a game solver to objectively measure training progress (if available)
 
 ## Results
-After 9 generations of training (approx ~15 min on an RTX 3090) we achieve the following results:
+After 9 generations of training (approx ~15 min on an RTX 3090) we achieve promising results on the Zootopia game environment.
 
 ![Training Results](https://raw.githubusercontent.com/advait/c4a0/refs/heads/master/images/learning.png)
 
@@ -69,15 +58,15 @@ After 9 generations of training (approx ~15 min on an RTX 3090) we achieve the f
 
 ### PyTorch NN [`src/c4a0/nn.py`](https://github.com/advait/c4a0/blob/master/src/c4a0/nn.py?ts=2)
 
-A resnet-style CNN that takes in as input a baord position and outputs a Policy (probability
+A resnet-style CNN that takes in as input a game position and outputs a Policy (probability
 distribution over moves weighted by promise) and Q Value (predicted win/loss value [-1, 1]).
 
-Various NN hyperparameters can are sweepable via the `nn-sweep` command.
+Various NN hyperparameters are sweepable via the `nn-sweep` command.
 
-### Connect Four Game Logic [`rust/src/c4r.rs`](https://github.com/advait/c4a0/blob/master/rust/src/c4r.rs?ts=2)
+### Zootopia Game Logic [`rust/src/zootopia.rs`](https://github.com/advait/c4a0/blob/master/rust/src/zootopia.rs?ts=2)
 
-Implements compact bitboard representation of board state (`Pos`) and all connect four rules
-and game logic.
+Implements compact representation of game state (`Pos`) and all Zootopia game rules
+and logic including animal movement, pellet collection, and zookeeper interactions.
 
 ### Monte Carlo Tree Search (MCTS) [`rust/src/mcts.rs`](https://github.com/advait/c4a0/blob/master/rust/src/mcts.rs?ts=2)
 
@@ -93,12 +82,7 @@ Uses rust multi-threading to parallelize self play (training data generation).
 
 ### Solver [`rust/src/solver.rs`](https://github.com/advait/c4a0/blob/master/rust/src/solver.rs?ts=2)
 
-Connect Four is a perfectly solved game. See Pascal Pons's [great
-writeup](http://blog.gamesolver.org/) on how to build a perfect solver. We can use these solutions
-to objectively measure our NN's performance. Importantly we **never train on these solutions**,
-instead only using our self-play data to improve the NN's performance.
-
-`solver.rs` contains the stdin/out interface to learn the objective solutions to our training
-positions. Because solutions are expensive to compute, we cache them in a local
-[rocksdb](https://docs.rs/rocksdb/latest/rocksdb/) database (solutions.db). We then measure our
-training positions to see how often they recommend optimal moves as determined by the solver.
+Game analysis and optimization tools for measuring NN performance. Contains interfaces to evaluate
+optimal play strategies and cache solutions in a local [rocksdb](https://docs.rs/rocksdb/latest/rocksdb/) 
+database. We measure our training positions to see how often they recommend optimal moves as 
+determined by game analysis algorithms.

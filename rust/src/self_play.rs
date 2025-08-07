@@ -12,7 +12,7 @@ use crossbeam_channel::{bounded, Receiver, RecvError, Sender};
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 
 use crate::{
-    c4r::Pos,
+    zootopia::Pos,
     mcts::MctsGame,
     types::{EvalPosResult, EvalPosT, GameMetadata, GameResult, ModelID},
 };
@@ -424,7 +424,7 @@ pub mod tests {
         );
 
         for result in results {
-            assert_ge!(result.samples.len(), 7);
+            assert_ge!(result.samples.len(), 1); // Zootopia games can be shorter than Connect Four
             assert_eq!(
                 result
                     .samples

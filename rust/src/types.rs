@@ -8,10 +8,10 @@ use numpy::{
 use pyo3::prelude::*;
 use serde::{Deserialize, Serialize};
 
-use crate::c4r::Pos;
+use crate::zootopia::Pos;
 
-/// Probabilities for how lucrative each column is.
-pub type Policy = [f32; Pos::N_COLS];
+/// Probabilities for how lucrative each move direction is.
+pub type Policy = [f32; Pos::N_MOVES];
 
 /// The lucrativeness value of a given position. This is the objective we are trying to maximize.
 pub type QValue = f32;
@@ -78,9 +78,10 @@ impl GameResult {
         for sample in self.samples.iter() {
             if let Some(terminal) = sample.pos.is_terminal_state() {
                 let score = match terminal {
-                    crate::c4r::TerminalState::PlayerWin => 1.0,
-                    crate::c4r::TerminalState::OpponentWin => 0.0,
-                    crate::c4r::TerminalState::Draw => 0.5,
+                    crate::zootopia::TerminalState::Success => 1.0,
+                    crate::zootopia::TerminalState::Failure => 0.0,
+                    crate::zootopia::TerminalState::Timeout => 0.5,
+                    crate::zootopia::TerminalState::InProgress => 0.5, // Default to neutral for in-progress games
                 };
 
                 // When we play positions, we flip the pieces so that the "player to play" is

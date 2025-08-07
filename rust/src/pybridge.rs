@@ -6,7 +6,7 @@ use pyo3::{
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    c4r::Pos,
+    zootopia::Pos,
     self_play::self_play,
     solver::CachingSolver,
     tui,
@@ -193,7 +193,7 @@ impl EvalPosT for PyEvalPos {
 
             (0..batch_size)
                 .map(|i| EvalPosResult {
-                    policy: policy_from_slice(&policy[i * Pos::N_COLS..(i + 1) * Pos::N_COLS]),
+                    policy: policy_from_slice(&policy[i * Pos::N_MOVES..(i + 1) * Pos::N_MOVES]),
                     q_penalty: q_penalty[i],
                     q_no_penalty: q_no_penalty[i],
                 })
@@ -215,8 +215,8 @@ fn create_pos_batch<'py>(py: Python<'py>, positions: &Vec<Pos>) -> Bound<'py, Py
         (
             positions.len(),
             Pos::BUF_N_CHANNELS,
-            Pos::N_ROWS,
-            Pos::N_COLS,
+            Pos::DEFAULT_HEIGHT,
+            Pos::DEFAULT_WIDTH,
         ),
         buffer,
     )
@@ -226,7 +226,7 @@ fn create_pos_batch<'py>(py: Python<'py>, positions: &Vec<Pos>) -> Bound<'py, Py
 
 /// Convert a slice of probabilities into a [Policy].
 fn policy_from_slice(policy: &[f32]) -> Policy {
-    debug_assert_eq!(policy.len(), Pos::N_COLS);
+    debug_assert_eq!(policy.len(), Pos::N_MOVES);
     let mut ret = Policy::default();
     ret.copy_from_slice(policy);
     ret

@@ -1,5 +1,6 @@
 #![allow(dead_code)]
-mod c4r;
+// mod c4r;
+mod zootopia;
 mod interactive_play;
 mod mcts;
 mod pybridge;
@@ -9,7 +10,7 @@ mod tui;
 mod types;
 mod utils;
 
-use c4r::Pos;
+use zootopia::Pos;
 use env_logger::Env;
 use pybridge::PlayGamesResult;
 use pyo3::prelude::*;
@@ -36,3 +37,6 @@ fn c4a0_rust(_py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
 
     Ok(())
 }
+
+pub mod debug_tests;
+pub mod softmax_debug;
