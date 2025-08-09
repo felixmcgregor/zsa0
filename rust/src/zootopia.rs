@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::types::{Policy, QValue};
 
-/// Game state data structure matching the JSON format
+/// Game state data structure matching the actual JSON format from game engine
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GameState {
     #[serde(rename = "TimeStamp")]
@@ -14,19 +14,57 @@ pub struct GameState {
     #[serde(rename = "Tick")]
     pub tick: u32,
     #[serde(rename = "Cells")]
-    pub cells: Vec<Cell>,
+    pub cells: Vec<CellWithPosition>,
     #[serde(rename = "Animals")]
-    pub animals: Vec<Animal>,
+    pub animals: Vec<AnimalState>,
     #[serde(rename = "Zookeepers")]
-    pub zookeepers: Vec<Zookeeper>,
+    pub zookeepers: Vec<ZookeeperState>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CellWithPosition {
+    #[serde(rename = "X")]
+    pub x: usize,
+    #[serde(rename = "Y")]
+    pub y: usize,
+    #[serde(rename = "Content")]
+    pub content: u8,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AnimalState {
+    #[serde(rename = "x", skip_serializing_if = "Option::is_none")]
+    pub x: Option<usize>,
+    #[serde(rename = "y", skip_serializing_if = "Option::is_none")]
+    pub y: Option<usize>,
+    #[serde(rename = "id", skip_serializing_if = "Option::is_none")]
+    pub id: Option<u32>,
+    #[serde(rename = "ActivePowerUp")]
+    pub active_power_up: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ZookeeperState {
+    #[serde(rename = "x", skip_serializing_if = "Option::is_none")]
+    pub x: Option<usize>,
+    #[serde(rename = "y", skip_serializing_if = "Option::is_none")]
+    pub y: Option<usize>,
+    #[serde(rename = "id", skip_serializing_if = "Option::is_none")]
+    pub id: Option<u32>,
+    #[serde(rename = "SpawnY", skip_serializing_if = "Option::is_none")]
+    pub spawn_y: Option<usize>,
+    #[serde(rename = "SpawnX", skip_serializing_if = "Option::is_none")]
+    pub spawn_x: Option<usize>,
+}
+
+/// Legacy cell structure for backwards compatibility
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Cell {
     #[serde(rename = "Content")]
     pub content: u8,
 }
 
+/// Legacy animal structure for backwards compatibility  
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Animal {
     pub x: usize,
@@ -34,6 +72,7 @@ pub struct Animal {
     pub id: u32,
 }
 
+/// Legacy zookeeper structure for backwards compatibility
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Zookeeper {
     pub x: usize,
@@ -98,16 +137,16 @@ pub enum Move {
 
 impl Default for Pos {
     fn default() -> Self {
-        let mut cells = vec![0; 400]; // 20x20 grid of empty cells
+        let mut cells = vec![0; 51 * 51]; // 51x51 grid of empty cells
         // Place pellets near the player for easier testing
-        cells[10 * 20 + 11] = 2; // Pellet at (11, 10) - one move right from player
-        cells[9 * 20 + 10] = 2;  // Pellet at (10, 9) - one move up from player
+        cells[25 * 51 + 26] = 2; // Pellet at (26, 25) - one move right from player
+        cells[24 * 51 + 25] = 2;  // Pellet at (25, 24) - one move up from player
         Pos {
-            width: 20,
-            height: 20,
+            width: 51,
+            height: 51,
             cells,
-            player_x: 10,
-            player_y: 10,
+            player_x: 25,
+            player_y: 25,
             zookeepers: vec![],
             tick: 0,
             score: 0,
@@ -119,8 +158,8 @@ impl Default for Pos {
 
 impl Pos {
     /// Default grid dimensions (can be overridden when loading from JSON)
-    pub const DEFAULT_WIDTH: usize = 20;
-    pub const DEFAULT_HEIGHT: usize = 20;
+    pub const DEFAULT_WIDTH: usize = 51;
+    pub const DEFAULT_HEIGHT: usize = 51;
     
     /// For compatibility with Connect Four interface
     pub const N_COLS: usize = Self::N_MOVES; // Map to number of moves for policy arrays
@@ -145,8 +184,10 @@ impl Pos {
         
         // Find player position (assuming first animal is the player)
         let (player_x, player_y) = if let Some(animal) = game_state.animals.first() {
-            // Wrap animal position around grid
-            (animal.x % width, animal.y % height)
+            // Handle optional x,y coordinates with defaults
+            let x = animal.x.unwrap_or(width / 2);
+            let y = animal.y.unwrap_or(height / 2);
+            (x % width, y % height) // Wrap around grid
         } else {
             (width / 2, height / 2) // Default to center if no animals
         };
@@ -154,7 +195,14 @@ impl Pos {
         // Extract zookeeper positions
         let zookeepers: Vec<(usize, usize)> = game_state.zookeepers
             .iter()
-            .map(|zk| (zk.x % width, zk.y % height)) // Wrap zookeeper positions too
+            .filter_map(|zk| {
+                // Handle optional x,y coordinates
+                if let (Some(x), Some(y)) = (zk.x, zk.y) {
+                    Some((x % width, y % height)) // Wrap positions
+                } else {
+                    None // Skip zookeepers without valid positions
+                }
+            })
             .collect();
 
         // Check if there were any pellets in the initial game state
@@ -523,20 +571,20 @@ pub mod tests {
     fn test_basic_movement() {
         let pos = Pos::default();
         
-        // Test moving right
+        // Test moving right (from center at 25,25 to 26,25)
         let new_pos = pos.make_move(Move::Right).unwrap();
-        assert_eq!(new_pos.player_position(), (11, 10));
+        assert_eq!(new_pos.player_position(), (26, 25));
         
-        // Test moving up
+        // Test moving up (from center at 25,25 to 25,24)
         let new_pos = pos.make_move(Move::Up).unwrap();
-        assert_eq!(new_pos.player_position(), (10, 9));
+        assert_eq!(new_pos.player_position(), (25, 24));
     }
 
     #[test]
     fn test_wall_collision() {
         let mut pos = Pos::default();
-        // Set a wall to the right of the player
-        pos.set_cell_content(11, 10, CellContent::Wall);
+        // Set a wall to the right of the player (at position 26,25)
+        pos.set_cell_content(26, 25, CellContent::Wall);
         
         // Moving right should fail
         assert!(pos.make_move(Move::Right).is_none());
@@ -545,12 +593,12 @@ pub mod tests {
     #[test]
     fn test_pellet_collection() {
         let mut pos = Pos::default();
-        // Place a pellet to the right of the player
-        pos.set_cell_content(11, 10, CellContent::Pellet);
+        // Place a pellet to the right of the player (at position 26,25)
+        pos.set_cell_content(26, 25, CellContent::Pellet);
         
         let new_pos = pos.make_move(Move::Right).unwrap();
         assert_eq!(new_pos.score(), 3); // Pellet gives 3 points
-        assert_eq!(new_pos.get_cell_content(11, 10), Some(CellContent::Empty));
+        assert_eq!(new_pos.get_cell_content(26, 25), Some(CellContent::Empty));
     }
 
     #[test]
@@ -673,8 +721,8 @@ pub mod tests {
     #[test]
     fn test_zookeeper_capture() {
         let mut pos = Pos::default();
-        // Place a zookeeper to the right of the player
-        pos.zookeepers = vec![(11, 10)];
+        // Place a zookeeper to the right of the player (at position 26,25)
+        pos.zookeepers = vec![(26, 25)];
         
         // Moving right should result in capture
         let new_pos = pos.make_move(Move::Right).unwrap();
@@ -684,8 +732,8 @@ pub mod tests {
     #[test]
     fn test_zookeeper_avoidance() {
         let mut pos = Pos::default();
-        // Place a zookeeper to the left of the player
-        pos.zookeepers = vec![(9, 10)];
+        // Place a zookeeper to the left of the player (at position 24,25)
+        pos.zookeepers = vec![(24, 25)];
         
         // Moving right should be safe
         let new_pos = pos.make_move(Move::Right).unwrap();
@@ -796,7 +844,7 @@ mod tensor_debug_tests {
                  batch_size, Pos::BUF_N_CHANNELS, Pos::DEFAULT_HEIGHT, Pos::DEFAULT_WIDTH);
         
         // Calculate expected flattened size after conv layers
-        // With 32 filters on a 20x20 grid (assuming no padding changes size)
+        // With 32 filters on a 51x51 grid (assuming no padding changes size)
         let conv_filters = 32; // From your config
         let expected_fc_input_size = conv_filters * Pos::DEFAULT_HEIGHT * Pos::DEFAULT_WIDTH;
         println!("Expected FC input size with {} filters: {}", conv_filters, expected_fc_input_size);
@@ -813,10 +861,10 @@ mod tensor_debug_tests {
         
         // Verify the calculations match what Python expects
         assert_eq!(Pos::BUF_N_CHANNELS, 3);
-        assert_eq!(Pos::DEFAULT_HEIGHT, 20);
-        assert_eq!(Pos::DEFAULT_WIDTH, 20);
-        assert_eq!(Pos::BUF_LEN, 3 * 20 * 20);
-        assert_eq!(expected_fc_input_size, 32 * 20 * 20); // Should be 12800
+        assert_eq!(Pos::DEFAULT_HEIGHT, 51);
+        assert_eq!(Pos::DEFAULT_WIDTH, 51);
+        assert_eq!(Pos::BUF_LEN, 3 * 51 * 51);
+        assert_eq!(expected_fc_input_size, 32 * 51 * 51); // Should be 83232
     }
     
     #[test] 
@@ -879,16 +927,16 @@ mod tensor_debug_tests {
         let input_elements_per_batch = channels * height * width;
         println!("Input elements per batch item: {}", input_elements_per_batch);
         
-        // With 32 conv filters, the output should be 32 * 20 * 20 = 12800 per batch item
+        // With 32 conv filters, the output should be 32 * 51 * 51 = 83232 per batch item
         let conv_filters = 32;
         let expected_conv_output_per_batch = conv_filters * height * width;
         println!("Expected conv output per batch (32 filters): {}", expected_conv_output_per_batch);
         
-        // This should match the "1x12800" from your error message
-        assert_eq!(expected_conv_output_per_batch, 12800);
+        // This should match the new expected size with 51x51 grid
+        assert_eq!(expected_conv_output_per_batch, 83232);
         
         // Also verify the input calculation
-        assert_eq!(input_elements_per_batch, 1200); // 3 * 20 * 20
+        assert_eq!(input_elements_per_batch, 7803); // 3 * 51 * 51
         assert_eq!(channels * height * width, Pos::BUF_LEN);
     }
     
