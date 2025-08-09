@@ -58,6 +58,10 @@ pub struct Pos {
     tick: u32,
     /// Score
     score: u32,
+    /// Target number of pellets to collect for winning
+    target_pellets: u32,
+    /// Number of pellets collected so far
+    pellets_collected: u32,
 }
 
 /// Cell content values matching the C# enum
@@ -103,6 +107,8 @@ impl Default for Pos {
             zookeepers: vec![],
             tick: 0,
             score: 0,
+            target_pellets: 1,
+            pellets_collected: 0,
         }
     }
 }
@@ -135,7 +141,8 @@ impl Pos {
         
         // Find player position (assuming first animal is the player)
         let (player_x, player_y) = if let Some(animal) = game_state.animals.first() {
-            (animal.x, animal.y)
+            // Wrap animal position around grid
+            (animal.x % width, animal.y % height)
         } else {
             (width / 2, height / 2) // Default to center if no animals
         };
@@ -143,8 +150,13 @@ impl Pos {
         // Extract zookeeper positions
         let zookeepers: Vec<(usize, usize)> = game_state.zookeepers
             .iter()
-            .map(|zk| (zk.x, zk.y))
+            .map(|zk| (zk.x % width, zk.y % height)) // Wrap zookeeper positions too
             .collect();
+
+        // Check if there were any pellets in the initial game state
+        let target_pellets = game_state.cells.iter().filter(|cell| {
+            matches!(cell.content, 2 | 5) // Pellet or PowerPellet
+        }).count() as u32;
 
         Pos {
             width,
@@ -155,12 +167,15 @@ impl Pos {
             zookeepers,
             tick: game_state.tick,
             score: 0, // Initialize score to 0, could be calculated from collected pellets
+            target_pellets,
+            pellets_collected: 0,
         }
     }
 
     /// Makes a move in the given direction
     /// Returns a new position if the move is valid, None otherwise
     pub fn make_move(&self, mov: Move) -> Option<Pos> {
+        // Wrap player position around grid
         let (new_x, new_y) = match mov {
             Move::Up => (self.player_x, (self.player_y + self.height - 1) % self.height),
             Move::Down => (self.player_x, (self.player_y + 1) % self.height),
@@ -182,6 +197,8 @@ impl Pos {
         // Check if player is captured by any zookeeper
         if new_pos.zookeepers.iter().any(|&(zk_x, zk_y)| zk_x == new_x && zk_y == new_y) {
             // Player is captured, but we still return the position so the terminal state can be detected
+            new_pos.score -= 10; // Penalize for being caught
+            new_pos.pellets_collected -= 3;
             return Some(new_pos);
         }
 
@@ -190,21 +207,26 @@ impl Pos {
             match content {
                 CellContent::Pellet => {
                     new_pos.score += 3;
+                    new_pos.pellets_collected += 1;
                     new_pos.set_cell_content(new_x, new_y, CellContent::Empty);
                 }
                 CellContent::PowerPellet => {
                     new_pos.score += 30;
+                    new_pos.pellets_collected += 1;
                     new_pos.set_cell_content(new_x, new_y, CellContent::Empty);
                 }
                 CellContent::ChameleonCloak => {
                     new_pos.score += 1;
+                    new_pos.pellets_collected += 1;
                     new_pos.set_cell_content(new_x, new_y, CellContent::Empty);
                 }
                 CellContent::Scavenger => {
+                    new_pos.pellets_collected += 3;
                     new_pos.score += 100;
                     new_pos.set_cell_content(new_x, new_y, CellContent::Empty);
                 }
                 CellContent::BigMooseJuice => {
+                    new_pos.pellets_collected += 2;
                     new_pos.score += 60;
                     new_pos.set_cell_content(new_x, new_y, CellContent::Empty);
                 }
@@ -264,6 +286,27 @@ impl Pos {
         self.score
     }
 
+    /// Returns the target number of pellets to collect for winning
+    pub fn target_pellets(&self) -> u32 {
+        self.target_pellets
+    }
+
+    /// Returns the number of pellets collected so far
+    pub fn pellets_collected(&self) -> u32 {
+        self.pellets_collected
+    }
+
+    /// Sets the target number of pellets to collect for winning
+    pub fn set_target_pellets(&mut self, target: u32) {
+        self.target_pellets = target;
+    }
+
+    /// Creates a new position with a specific target pellet count
+    pub fn with_target_pellets(mut self, target: u32) -> Self {
+        self.target_pellets = target;
+        self
+    }
+
     /// For compatibility with Connect Four interface - returns a sequence of moves
     /// In Zootopia, this is not meaningful but we provide a stub implementation
     pub fn to_moves(&self) -> Vec<crate::zootopia::Move> {
@@ -301,15 +344,16 @@ impl Pos {
         }
 
         // Check if all pellets are collected (win condition)
-        let has_pellets = self.cells.iter().any(|&cell| {
-            matches!(cell, 2 | 5) // Pellet or PowerPellet
+        let _has_pellets = self.cells.iter().any(|&cell| {
+            matches!(cell, 2 | 5 | 6 | 7 | 8) // Pellet, PowerPellet, ChameleonCloak, Scavenger, BigMooseJuice
         });
 
-        if !has_pellets {
+        if self.pellets_collected >= self.target_pellets && self.target_pellets > 0 {
+            // All target pellets collected - this is a win!
             return Some(TerminalState::Success);
         }
 
-        // For now, assume game continues
+        // Game continues
         Some(TerminalState::InProgress)
     }
 
@@ -448,11 +492,14 @@ impl Display for Pos {
 }
 
 impl fmt::Debug for Pos {
+    // "Pos {{ width: {}, height: {}, player: ({}, {}), tick: {}, score: {} }}",
+    // self.width, self.height, self.player_x, self.player_y, self.tick, self.score
+
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "Pos {{ width: {}, height: {}, player: ({}, {}), tick: {}, score: {} }}",
-            self.width, self.height, self.player_x, self.player_y, self.tick, self.score
+            "Pos {{ player: (x={}, y={}), tick: {}, score: {}, target_pellets: {}, pellets_collected: {} }}",
+            self.player_x, self.player_y, self.tick, self.score, self.target_pellets, self.pellets_collected
         )
     }
 }
@@ -636,6 +683,52 @@ pub mod tests {
         // Moving left should result in capture
         let captured_pos = pos.make_move(Move::Left).unwrap();
         assert_eq!(captured_pos.is_terminal_state(), Some(TerminalState::Failure));
+    }
+
+    #[test]
+    fn is_terminal() {
+        println!("Running test: is_terminal");
+        // Create a small test position with JSON
+        let json = r#"{
+            "TimeStamp": "2025-08-07T00:00:00Z",
+            "Tick": 1,
+            "Cells": [
+                {"Content": 0}, {"Content": 2}, {"Content": 2},
+                {"Content": 0}, {"Content": 0}, {"Content": 0},
+                {"Content": 0}, {"Content": 0}, {"Content": 0}
+            ],
+            "Animals": [{"x": 0, "y": 0, "id": 1}],
+            "Zookeepers": []
+        }"#;
+        let game_state: crate::zootopia::GameState = serde_json::from_str(json).unwrap();
+        let pos = crate::zootopia::Pos::from_game_state(&game_state);
+        println!("Position: {:?}", pos);
+        println!("Player position: {:?}", pos.player_position());
+        println!("Grid dimensions: {:?}", pos.dimensions());
+        println!("Cell (1, 0): {:?}", pos.get_cell_content(1, 0));
+        // Check if the position is terminal
+        let terminal_state = pos.is_terminal_state();
+        println!("Terminal state: {:?}", terminal_state);
+        assert_eq!(terminal_state, Some(TerminalState::InProgress), "Position should be in progress");
+
+        // Now collect the pellet at (1, 0)
+        let new_pos = pos.make_move(Move::Right).unwrap();
+        println!("New position after collecting pellet: {:?}", new_pos);
+        assert_eq!(new_pos.pellets_collected(), 1, "Should have collected 1 pellet");
+        assert_eq!(new_pos.score(), 3, "Score should be 3 after collecting pellet");
+        // Check if the new position is terminal
+        let new_terminal_state = new_pos.is_terminal_state();
+        println!("New terminal state: {:?}", new_terminal_state);
+        assert_eq!(new_terminal_state, Some(TerminalState::InProgress), "New position should still be in progress");
+        // Now collect the pellet at (2, 0)
+        let new_pos = new_pos.make_move(Move::Right).unwrap();
+        println!("New position after collecting second pellet: {:?}", new_pos);
+        assert_eq!(new_pos.pellets_collected(), 2, "Should have collected 2 pellets");
+        assert_eq!(new_pos.score(), 6, "Score should be 6 after collecting second pellet");
+        // Check if the new position is terminal
+        let new_terminal_state = new_pos.is_terminal_state();
+        println!("New terminal state after second pellet: {:?}", new_terminal_state);
+        assert_eq!(new_terminal_state, Some(TerminalState::InProgress), "New position should still be in progress");
     }
 
     #[test]
