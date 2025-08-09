@@ -45,7 +45,9 @@ impl MctsGame {
                     if let Some(child_rc) = child_opt {
                         if Rc::ptr_eq(child_rc, &self.leaf) {
                             *child_opt = None;
-                            println!("Pruned terminal leaf at move index {}", i);
+                            if self.debug {
+                                println!("Pruned terminal leaf at move index {}", i);
+                            }
                             break;
                         }
                     }

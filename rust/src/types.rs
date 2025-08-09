@@ -116,7 +116,7 @@ impl Sample {
     pub fn flip_h(&self) -> Sample {
         Sample {
             pos: self.pos.flip_h(),
-            policy: array::from_fn(|col| self.policy[Pos::N_COLS - 1 - col]),
+            policy: array::from_fn(|col| self.policy[Pos::N_MOVES - 1 - col]),
             q_penalty: self.q_penalty,
             q_no_penalty: self.q_no_penalty,
         }
@@ -154,7 +154,7 @@ impl Sample {
 }
 
 pub fn policy_from_iter<I: IntoIterator<Item = f32>>(iter: I) -> Policy {
-    let mut policy = [0.0; Pos::N_COLS];
+    let mut policy = [0.0; Pos::N_MOVES];
     for (i, p) in iter.into_iter().enumerate() {
         policy[i] = p;
     }
