@@ -471,18 +471,18 @@ pub fn apply_temperature(policy: &Policy, temperature: f32) -> Policy {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use approx::assert_relative_eq;
-    use more_asserts::{assert_gt, assert_lt};
-    use proptest::prelude::*;
+    // use approx::assert_relative_eq;
+    // use proptest::prelude::*;
+    use more_asserts::assert_gt;
 
-    // --- Move constants to the top of the module ---
+    // --- constants ---
     const CONST_MOVE_WEIGHT: f32 = 1.0 / (Pos::N_MOVES as f32);
     const CONST_POLICY: Policy = [CONST_MOVE_WEIGHT; Pos::N_MOVES];
     const TEST_C_EXPLORATION: f32 = 1.0;
     const TEST_C_PLY_PENALTY: f32 = 0.1;
     
 
-    // --- Move helper functions to the top of the module ---
+    // --- helper functions ---
     fn assert_policy_sum_1(policy: &Policy) {
         let sum = policy.iter().sum::<f32>();
         if (sum - 1.0).abs() > 1e-5 {
@@ -664,9 +664,8 @@ mod tests {
         }"#;
         let game_state: crate::zootopia::GameState = serde_json::from_str(json).unwrap();
         let pos = crate::zootopia::Pos::from_game_state(&game_state);
-        let (policy, q_penalty, q_no_penalty) = run_mcts(pos, 1000);
-        println!("Policy: {:?}", policy);
-        println!("Q no penalty: {}", q_no_penalty);
+        let (policy, _q_penalty, q_no_penalty) = run_mcts(pos, 1000);
+        println!("Policy: {:?}, q_no_penalty: {}", policy, q_no_penalty);
         assert_policy_sum_1(&policy);
         assert_gt!(q_no_penalty, 0.5);
     }
@@ -689,7 +688,7 @@ mod tests {
         let game_state: crate::zootopia::GameState = serde_json::from_str(json).unwrap();
         let pos = crate::zootopia::Pos::from_game_state(&game_state);
         let (policy, q_penalty, q_no_penalty) = run_mcts(pos, 10_000);
-        println!("Policy: {:?}", policy);
+        println!("policy: {:?}, q_penalty: {}, q_no_penalty: {}", policy, q_penalty, q_no_penalty); 
         assert_policy_sum_1(&policy);
         assert!(policy[3] > 0.0); // Right move should be possible
     }
@@ -754,9 +753,9 @@ mod tests {
             ],
             "Animals": [{"x": 1, "y": 1, "id": 1}],
             "Zookeepers": [
-                {"x": 1, "y": 0, "id": 1}, // Up
-                {"x": 1, "y": 2, "id": 2}, // Down
-                {"x": 0, "y": 1, "id": 3}  // Left
+                {"x": 1, "y": 0, "id": 1},
+                {"x": 1, "y": 2, "id": 2},
+                {"x": 0, "y": 1, "id": 3}
             ]
         }"#;
         let game_state: crate::zootopia::GameState = serde_json::from_str(json).unwrap();

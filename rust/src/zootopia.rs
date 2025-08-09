@@ -52,6 +52,8 @@ pub struct Pos {
     /// Player position
     player_x: usize,
     player_y: usize,
+    /// Zookeeper positions
+    zookeepers: Vec<(usize, usize)>,
     /// Current tick/turn number
     tick: u32,
     /// Score
@@ -98,6 +100,7 @@ impl Default for Pos {
             cells: vec![0; 400], // 20x20 grid of empty cells
             player_x: 10,
             player_y: 10,
+            zookeepers: vec![],
             tick: 0,
             score: 0,
         }
@@ -137,12 +140,19 @@ impl Pos {
             (width / 2, height / 2) // Default to center if no animals
         };
 
+        // Extract zookeeper positions
+        let zookeepers: Vec<(usize, usize)> = game_state.zookeepers
+            .iter()
+            .map(|zk| (zk.x, zk.y))
+            .collect();
+
         Pos {
             width,
             height,
             cells,
             player_x,
             player_y,
+            zookeepers,
             tick: game_state.tick,
             score: 0, // Initialize score to 0, could be calculated from collected pellets
         }
@@ -168,6 +178,12 @@ impl Pos {
         new_pos.player_x = new_x;
         new_pos.player_y = new_y;
         new_pos.tick += 1;
+
+        // Check if player is captured by any zookeeper
+        if new_pos.zookeepers.iter().any(|&(zk_x, zk_y)| zk_x == new_x && zk_y == new_y) {
+            // Player is captured, but we still return the position so the terminal state can be detected
+            return Some(new_pos);
+        }
 
         // Handle pellet collection
         if let Some(content) = self.get_cell_content(new_x, new_y) {
@@ -279,6 +295,11 @@ impl Pos {
 
     /// Determines if the game is over
     pub fn is_terminal_state(&self) -> Option<TerminalState> {
+        // Check if player is captured by any zookeeper
+        if self.zookeepers.iter().any(|&(zk_x, zk_y)| zk_x == self.player_x && zk_y == self.player_y) {
+            return Some(TerminalState::Failure);
+        }
+
         // Check if all pellets are collected (win condition)
         let has_pellets = self.cells.iter().any(|&cell| {
             matches!(cell, 2 | 5) // Pellet or PowerPellet
@@ -288,7 +309,7 @@ impl Pos {
             return Some(TerminalState::Success);
         }
 
-        // For now, assume game continues (would need zookeeper logic for loss condition)
+        // For now, assume game continues
         Some(TerminalState::InProgress)
     }
 
@@ -343,6 +364,11 @@ impl Pos {
     /// Returns the player position as a tuple (x, y)
     pub fn player_position(&self) -> (usize, usize) {
         (self.player_x, self.player_y)
+    }
+
+    /// Returns the positions of all zookeepers as a slice
+    pub fn zookeeper_positions(&self) -> &[(usize, usize)] {
+        &self.zookeepers
     }
 
     /// Returns the dimensions of the grid as (width, height)
@@ -437,7 +463,7 @@ pub mod tests {
 
     #[test]
     fn test_basic_movement() {
-        let mut pos = Pos::default();
+        let pos = Pos::default();
         
         // Test moving right
         let new_pos = pos.make_move(Move::Right).unwrap();
@@ -584,5 +610,55 @@ pub mod tests {
         // Test right move specifically (should fail due to wall)
         assert!(pos.make_move(Move::Right).is_none(), "Right move should be blocked by wall");
         assert!(!legal_moves[3], "Right move should be illegal");
+    }
+
+    #[test]
+    fn test_zookeeper_capture() {
+        let mut pos = Pos::default();
+        // Place a zookeeper to the right of the player
+        pos.zookeepers = vec![(11, 10)];
+        
+        // Moving right should result in capture
+        let new_pos = pos.make_move(Move::Right).unwrap();
+        assert_eq!(new_pos.is_terminal_state(), Some(TerminalState::Failure));
+    }
+
+    #[test]
+    fn test_zookeeper_avoidance() {
+        let mut pos = Pos::default();
+        // Place a zookeeper to the left of the player
+        pos.zookeepers = vec![(9, 10)];
+        
+        // Moving right should be safe
+        let new_pos = pos.make_move(Move::Right).unwrap();
+        assert_eq!(new_pos.is_terminal_state(), Some(TerminalState::InProgress));
+        
+        // Moving left should result in capture
+        let captured_pos = pos.make_move(Move::Left).unwrap();
+        assert_eq!(captured_pos.is_terminal_state(), Some(TerminalState::Failure));
+    }
+
+    #[test]
+    fn test_from_game_state_with_zookeepers() {
+        // Small 3x3 grid with zookeeper
+        let json = r#"{
+            "TimeStamp": "2025-08-07T00:00:00Z",
+            "Tick": 1,
+            "Cells": [
+                {"Content": 0}, {"Content": 0}, {"Content": 2},
+                {"Content": 0}, {"Content": 0}, {"Content": 0},
+                {"Content": 0}, {"Content": 0}, {"Content": 0}
+            ],
+            "Animals": [{"x": 0, "y": 0, "id": 1}],
+            "Zookeepers": [{"x": 1, "y": 0, "id": 1}]
+        }"#;
+        let game_state: GameState = serde_json::from_str(json).unwrap();
+        let pos = Pos::from_game_state(&game_state);
+        
+        assert_eq!(pos.zookeeper_positions(), &[(1, 0)]);
+        
+        // Moving right should result in capture
+        let new_pos = pos.make_move(Move::Right).unwrap();
+        assert_eq!(new_pos.is_terminal_state(), Some(TerminalState::Failure));
     }
 }

@@ -4,7 +4,6 @@ mod interactive_play;
 mod mcts;
 mod pybridge;
 mod self_play;
-mod solver;
 mod tui;
 mod types;
 mod utils;

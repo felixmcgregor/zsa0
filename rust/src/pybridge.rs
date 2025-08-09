@@ -1,14 +1,13 @@
 use numpy::{ndarray::Array4, IntoPyArray, PyArray4, PyReadonlyArray1, PyReadonlyArray2};
 use pyo3::{
     prelude::*,
-    types::{PyBytes, PyList},
+    types::PyList,
 };
 use serde::{Deserialize, Serialize};
 
 use crate::{
     zootopia::Pos,
     self_play::self_play,
-    solver::CachingSolver,
     tui,
     types::{EvalPosResult, EvalPosT, GameMetadata, GameResult, ModelID, Policy, Sample},
 };
@@ -70,28 +69,6 @@ impl PlayGamesResult {
         PlayGamesResult { results: vec![] }
     }
 
-    fn to_cbor(&self, py: Python) -> PyResult<PyObject> {
-        let cbor = serde_cbor::to_vec(self).map_err(pyify_err)?;
-        Ok(PyBytes::new_bound(py, &cbor).into())
-    }
-
-    #[staticmethod]
-    fn from_cbor(_py: Python, cbor: &[u8]) -> PyResult<Self> {
-        serde_cbor::from_slice(cbor).map_err(pyify_err)
-    }
-
-    /// Used for pickling serialization.
-    fn __getstate__(&self, py: Python) -> PyResult<PyObject> {
-        self.to_cbor(py)
-    }
-
-    /// Used for pickling deserialization.
-    fn __setstate__(&mut self, py: Python, state: PyObject) -> PyResult<()> {
-        let cbor: &[u8] = state.extract(py)?;
-        *self = Self::from_cbor(py, cbor)?;
-        Ok(())
-    }
-
     /// Combine two PlayGamesResult objects.
     fn __add__<'py>(&mut self, py: Python<'py>, other: PyObject) -> PyResult<Self> {
         let other = other.extract::<PlayGamesResult>(py)?;
@@ -121,33 +98,6 @@ impl PlayGamesResult {
             train.into_iter().flat_map(|r| r.samples.clone()).collect(),
             test.into_iter().flat_map(|r| r.samples.clone()).collect(),
         ))
-    }
-
-    /// Scores the policies in the results using the given solver.
-    /// `solver_path` is the path to the solver binary, see:
-    ///     https://github.com/PascalPons/connect4
-    /// `solver_book_path` is the path to the solver book:
-    ///     https://github.com/PascalPons/connect4/releases/tag/book?ts=2
-    /// `solution_cache_path` is the path to the solution cache file which will be created if it
-    /// is missing.
-    fn score_policies(
-        &self,
-        solver_path: String,
-        solver_book_path: String,
-        solution_cache_path: String,
-    ) -> PyResult<f32> {
-        let solver = CachingSolver::new(solver_path, solver_book_path, solution_cache_path);
-        let pos_and_policies = self
-            .results
-            .iter()
-            .flat_map(|r| r.samples.iter())
-            .filter(|s| s.pos.is_terminal_state().is_none())
-            .map(|p| (p.pos.clone(), p.policy.clone()))
-            .collect::<Vec<_>>();
-        let scores = solver.score_policies(pos_and_policies).map_err(pyify_err)?;
-        let n_scores = scores.len();
-        let avg_score = scores.into_iter().sum::<f32>() / n_scores as f32;
-        Ok(avg_score)
     }
 
     /// Returns the number of unique positions in the results.
