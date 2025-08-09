@@ -766,3 +766,162 @@ pub mod tests {
         assert_eq!(new_pos.is_terminal_state(), Some(TerminalState::Failure));
     }
 }
+
+// Test function to debug tensor shape issues
+#[cfg(test)]
+mod tensor_debug_tests {
+    use super::*;
+    
+    #[test]
+    fn test_tensor_dimensions() {
+        println!("=== Rust Tensor Dimension Debug ===");
+        println!("BUF_N_CHANNELS: {}", Pos::BUF_N_CHANNELS);
+        println!("DEFAULT_HEIGHT: {}", Pos::DEFAULT_HEIGHT);
+        println!("DEFAULT_WIDTH: {}", Pos::DEFAULT_WIDTH);
+        println!("BUF_LEN: {}", Pos::BUF_LEN);
+        println!("N_MOVES: {}", Pos::N_MOVES);
+        
+        // Test creating a batch of positions
+        let pos1 = Pos::default();
+        let pos2 = Pos::default();
+        let positions = vec![pos1, pos2];
+        
+        // Simulate what create_pos_batch does
+        let batch_size = positions.len();
+        let total_buffer_size = batch_size * Pos::BUF_LEN;
+        
+        println!("Batch size: {}", batch_size);
+        println!("Total buffer size: {}", total_buffer_size);
+        println!("Expected tensor shape: ({}, {}, {}, {})", 
+                 batch_size, Pos::BUF_N_CHANNELS, Pos::DEFAULT_HEIGHT, Pos::DEFAULT_WIDTH);
+        
+        // Calculate expected flattened size after conv layers
+        // With 32 filters on a 20x20 grid (assuming no padding changes size)
+        let conv_filters = 32; // From your config
+        let expected_fc_input_size = conv_filters * Pos::DEFAULT_HEIGHT * Pos::DEFAULT_WIDTH;
+        println!("Expected FC input size with {} filters: {}", conv_filters, expected_fc_input_size);
+        
+        // Test buffer creation
+        let mut buffer = vec![0.0f32; total_buffer_size];
+        for i in 0..batch_size {
+            let pos = &positions[i];
+            let pos_buffer = &mut buffer[i * Pos::BUF_LEN..(i + 1) * Pos::BUF_LEN];
+            pos.write_numpy_buffer(pos_buffer);
+        }
+        
+        println!("Buffer created successfully with {} elements", buffer.len());
+        
+        // Verify the calculations match what Python expects
+        assert_eq!(Pos::BUF_N_CHANNELS, 3);
+        assert_eq!(Pos::DEFAULT_HEIGHT, 20);
+        assert_eq!(Pos::DEFAULT_WIDTH, 20);
+        assert_eq!(Pos::BUF_LEN, 3 * 20 * 20);
+        assert_eq!(expected_fc_input_size, 32 * 20 * 20); // Should be 12800
+    }
+    
+    #[test] 
+    fn test_numpy_buffer_format() {
+        println!("=== Testing numpy buffer format ===");
+        let pos = Pos::default();
+        let mut buffer = vec![0.0f32; Pos::BUF_LEN];
+        pos.write_numpy_buffer(&mut buffer);
+        
+        let channel_size = Pos::DEFAULT_WIDTH * Pos::DEFAULT_HEIGHT;
+        println!("Channel size: {}", channel_size);
+        
+        // Check channel 0 (grid content)
+        println!("Channel 0 (grid) first 10 values: {:?}", &buffer[0..10]);
+        
+        // Check channel 1 (player position) 
+        let player_channel_start = channel_size;
+        println!("Channel 1 (player) around player position: {:?}", 
+                 &buffer[player_channel_start + 200 - 5..player_channel_start + 200 + 5]);
+        
+        // Check channel 2 (features)
+        let features_channel_start = 2 * channel_size;
+        println!("Channel 2 (features) first 10 values: {:?}", &buffer[features_channel_start..features_channel_start + 10]);
+    }
+
+    #[test]
+    fn test_create_pos_batch_shape() {
+        println!("=== Testing tensor buffer creation manually ===");
+        
+        // Create a small batch of positions
+        let positions = vec![
+            Pos::default(),
+            Pos::default(),
+            Pos::default(),
+        ];
+        
+        // Simulate what create_pos_batch does manually
+        let batch_size = positions.len();
+        let mut buffer = vec![0.0f32; batch_size * Pos::BUF_LEN];
+        
+        for i in 0..batch_size {
+            let pos = &positions[i];
+            let pos_buffer = &mut buffer[i * Pos::BUF_LEN..(i + 1) * Pos::BUF_LEN];
+            pos.write_numpy_buffer(pos_buffer);
+        }
+        
+        // Calculate the shape that would be created
+        let expected_shape = (batch_size, Pos::BUF_N_CHANNELS, Pos::DEFAULT_HEIGHT, Pos::DEFAULT_WIDTH);
+        
+        println!("Buffer length: {}", buffer.len());
+        println!("Expected shape: {:?}", expected_shape);
+        
+        let expected_buffer_len = batch_size * Pos::BUF_LEN;
+        assert_eq!(buffer.len(), expected_buffer_len);
+        
+        println!("✅ Buffer creation produces correct dimensions!");
+        
+        // Calculate what the flattened conv output size should be
+        let (batch_size, channels, height, width) = expected_shape;
+        let input_elements_per_batch = channels * height * width;
+        println!("Input elements per batch item: {}", input_elements_per_batch);
+        
+        // With 32 conv filters, the output should be 32 * 20 * 20 = 12800 per batch item
+        let conv_filters = 32;
+        let expected_conv_output_per_batch = conv_filters * height * width;
+        println!("Expected conv output per batch (32 filters): {}", expected_conv_output_per_batch);
+        
+        // This should match the "1x12800" from your error message
+        assert_eq!(expected_conv_output_per_batch, 12800);
+        
+        // Also verify the input calculation
+        assert_eq!(input_elements_per_batch, 1200); // 3 * 20 * 20
+        assert_eq!(channels * height * width, Pos::BUF_LEN);
+    }
+    
+    #[test]
+    fn test_mysterious_2560_calculation() {
+        println!("=== Investigating the mysterious 2560x2560 dimension ===");
+        
+        // The error mentioned "2560x2560" - let's figure out where this could come from
+        println!("Checking various calculations that could result in 2560:");
+        
+        // Could it be related to a different filter size?
+        let filter_64 = 64 * Pos::DEFAULT_HEIGHT * Pos::DEFAULT_WIDTH;
+        println!("64 filters * 20 * 20 = {}", filter_64); // Should be 25600
+        
+        let filter_128 = 128 * Pos::DEFAULT_HEIGHT;
+        println!("128 filters * 20 = {}", filter_128); // 2560!
+        
+        let sqrt_2560 = (2560.0_f32).sqrt();
+        println!("sqrt(2560) = {:.2}", sqrt_2560); // ~50.6
+        
+        // Could this be from an incorrectly calculated grid size?
+        let possible_grid = 2560 / Pos::BUF_N_CHANNELS;
+        println!("2560 / 3 channels = {:.2}", possible_grid); // ~853
+        
+        // Could this be from flattening a tensor incorrectly?
+        println!("Our correct calculation: 32 filters * 20 * 20 = {}", 32 * 20 * 20);
+        println!("Mysterious calculation: some_val * some_val = 2560 * 2560 = {}", 2560 * 2560);
+        
+        // The 2560x2560 suggests a square matrix, which might indicate
+        // the neural network is expecting a different input size
+        println!("Checking if 2560 could be a different conv output calculation...");
+        
+        // Maybe the issue is the neural network was configured with different dimensions?
+        println!("128 filters * 20 height = {}", 128 * 20); // This is 2560!
+    }
+}

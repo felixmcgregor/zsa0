@@ -81,10 +81,3 @@ MCTS relies on outputs from the NN. The output of MCTS helps train the next gene
 ### Self Play [`rust/src/self_play.rs`](https://github.com/felixmcgregor/zsa0/blob/master/rust/src/self_play.rs?ts=2)
 
 Uses rust multi-threading to parallelize self play (training data generation).
-
-### Solver [`rust/src/solver.rs`](https://github.com/felixmcgregor/zsa0/blob/master/rust/src/solver.rs?ts=2)
-
-Game analysis and optimization tools for measuring NN performance. Contains interfaces to evaluate
-optimal play strategies and cache solutions in a local [rocksdb](https://docs.rs/rocksdb/latest/rocksdb/) 
-database. We measure our training positions to see how often they recommend optimal moves as 
-determined by game analysis algorithms.

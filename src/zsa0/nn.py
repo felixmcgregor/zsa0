@@ -5,11 +5,16 @@ import numpy as np
 from pydantic import BaseModel
 import torch
 import torch.nn as nn
+import torch.optim as optim
 import torchmetrics
 import pytorch_lightning as pl
 from einops import rearrange
 
-from zsa0_rust import N_COLS, N_ROWS  # type: ignore
+from zsa0_rust import N_COLS, N_ROWS, BUF_N_CHANNELS  # type: ignore
+
+# Grid dimensions for the Zootopia game (20x20)
+GRID_HEIGHT = 20
+GRID_WIDTH = 20
 
 
 class ModelConfig(BaseModel):
@@ -61,7 +66,7 @@ class BottinaNet(pl.LightningModule):
         self.l2_reg = config.l2_reg
 
         self.conv = nn.Sequential(
-            nn.Conv2d(3, config.conv_filter_size, kernel_size=3, padding=1),
+            nn.Conv2d(BUF_N_CHANNELS, config.conv_filter_size, kernel_size=3, padding=1),
             *[
                 ResidualBlock(config.conv_filter_size)
                 for i in range(config.n_residual_blocks)
@@ -130,11 +135,13 @@ class BottinaNet(pl.LightningModule):
 
     def _calculate_conv_output_size(self):
         """Helper function to calculate the output size of the convolutional block."""
-        # Apply the convolutional layers to a dummy input
-        dummy_input = torch.zeros(1, 3, N_ROWS, N_COLS)
+        # Apply the convolutional layers to a dummy input with correct dimensions
+        # The game grid is 20x20 for Zootopia
+        dummy_input = torch.zeros(1, BUF_N_CHANNELS, GRID_HEIGHT, GRID_WIDTH)
         with torch.no_grad():
             dummy_output = self.conv(dummy_input)
-        return int(torch.numel(dummy_output))
+        # Return the flattened size per batch item (not total elements)
+        return dummy_output.numel() // dummy_output.size(0)
 
     def configure_optimizers(self):
         gen_n: int = self.trainer.gen_n  # type: ignore
@@ -147,7 +154,7 @@ class BottinaNet(pl.LightningModule):
             lr = gen_rate
 
         logger.info("using lr {} for gen_n {}", lr, gen_n)
-        optimizer = torch.optim.Adam(self.parameters(), lr=lr, weight_decay=self.l2_reg)
+        optimizer = optim.Adam(self.parameters(), lr=lr, weight_decay=self.l2_reg)
         return optimizer
 
     def training_step(self, batch, batch_idx):
