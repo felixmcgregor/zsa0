@@ -287,30 +287,48 @@ impl MctsThread {
 
                 // We have reached the sufficient number of MCTS iterations to make a move.
                 let root_pos = game.root_pos();
-                if root_pos.is_terminal_state().is_none() {
-                    // Make a random move according to the MCTS policy.
-                    // If we are in the early game, use a higher temperature to encourage
-                    // generating more diverse (but suboptimal) games.
-                    let ply = root_pos.ply();
-                    let temperature = match () {
-                        _ if ply < 4 => 4.0,
-                        _ if ply < 8 => 2.0,
-                        _ => 1.0,
-                    };
-                    game.make_random_move(self.c_exploration, temperature);
-                    self.nn_queue_tx.send(game).unwrap();
-                } else {
-                    // Game is over. Send to done_queue.
-                    self.n_games_remaining.fetch_sub(1, Ordering::Relaxed);
-                    self.done_queue_tx
-                        .send(game.to_result(self.c_ply_penalty))
-                        .unwrap();
-                    self.pb_game_done.inc(1);
+                match root_pos.is_terminal_state() {
+                    Some(crate::zootopia::TerminalState::InProgress) => {
+                        // Game is still in progress - make a random move according to the MCTS policy.
+                        // If we are in the early game, use a higher temperature to encourage
+                        // generating more diverse (but suboptimal) games.
+                        let ply = root_pos.ply();
+                        let temperature = match () {
+                            _ if ply < 4 => 4.0,
+                            _ if ply < 8 => 2.0,
+                            _ => 1.0,
+                        };
+                        game.make_random_move(self.c_exploration, temperature);
+                        self.nn_queue_tx.send(game).unwrap();
+                    }
+                    Some(_) => {
+                        // Game is over (Success, Failure, or Timeout). Send to done_queue.
+                        self.n_games_remaining.fetch_sub(1, Ordering::Relaxed);
+                        self.done_queue_tx
+                            .send(game.to_result(self.c_ply_penalty))
+                            .unwrap();
+                        self.pb_game_done.inc(1);
 
-                    if self.n_games_remaining.load(Ordering::Relaxed) == 0 {
-                        // We wrote the last game. Send poison pills to remaining threads.
-                        self.terminate_and_poison_other_threads();
-                        return Loop::Break;
+                        if self.n_games_remaining.load(Ordering::Relaxed) == 0 {
+                            // We wrote the last game. Send poison pills to remaining threads.
+                            self.terminate_and_poison_other_threads();
+                            return Loop::Break;
+                        }
+                    }
+                    None => {
+                        // This shouldn't happen in Zootopia since is_terminal_state always returns Some()
+                        // But handle it gracefully by treating as timeout
+                        println!("Warning: is_terminal_state returned None, treating as timeout");
+                        self.n_games_remaining.fetch_sub(1, Ordering::Relaxed);
+                        self.done_queue_tx
+                            .send(game.to_result(self.c_ply_penalty))
+                            .unwrap();
+                        self.pb_game_done.inc(1);
+
+                        if self.n_games_remaining.load(Ordering::Relaxed) == 0 {
+                            self.terminate_and_poison_other_threads();
+                            return Loop::Break;
+                        }
                     }
                 }
 
@@ -439,7 +457,13 @@ pub mod tests {
             let terminal_positions = result
                 .samples
                 .iter()
-                .filter(|sample| sample.pos.is_terminal_state().is_some())
+                .filter(|sample| {
+                    match sample.pos.is_terminal_state() {
+                        Some(crate::zootopia::TerminalState::InProgress) => false,
+                        Some(_) => true, // Success, Failure, or Timeout
+                        None => false,
+                    }
+                })
                 .collect::<Vec<_>>();
             assert_eq!(
                 terminal_positions.len(),

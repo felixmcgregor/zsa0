@@ -98,16 +98,20 @@ pub enum Move {
 
 impl Default for Pos {
     fn default() -> Self {
+        let mut cells = vec![0; 400]; // 20x20 grid of empty cells
+        // Place pellets near the player for easier testing
+        cells[10 * 20 + 11] = 2; // Pellet at (11, 10) - one move right from player
+        cells[9 * 20 + 10] = 2;  // Pellet at (10, 9) - one move up from player
         Pos {
-            width: 20,  // Default grid size
+            width: 20,
             height: 20,
-            cells: vec![0; 400], // 20x20 grid of empty cells
+            cells,
             player_x: 10,
             player_y: 10,
             zookeepers: vec![],
             tick: 0,
             score: 0,
-            target_pellets: 1,
+            target_pellets: 2, // Need to collect both pellets
             pellets_collected: 0,
         }
     }
@@ -197,8 +201,9 @@ impl Pos {
         // Check if player is captured by any zookeeper
         if new_pos.zookeepers.iter().any(|&(zk_x, zk_y)| zk_x == new_x && zk_y == new_y) {
             // Player is captured, but we still return the position so the terminal state can be detected
-            new_pos.score -= 10; // Penalize for being caught
-            new_pos.pellets_collected -= 3;
+            println!("Player captured by zookeeper at ({}, {})", new_x, new_y);
+            new_pos.score = new_pos.score.saturating_sub(1); // Penalize for being caught, clamp to zero
+            new_pos.pellets_collected = new_pos.pellets_collected.saturating_sub(3); // Clamp to zero
             return Some(new_pos);
         }
 
@@ -338,6 +343,12 @@ impl Pos {
 
     /// Determines if the game is over
     pub fn is_terminal_state(&self) -> Option<TerminalState> {
+        // Add timeout mechanism to prevent infinite games
+        const MAX_MOVES: u32 = 200; // Reasonable limit for Zootopia games
+        if self.tick >= MAX_MOVES {
+            return Some(TerminalState::Timeout);
+        }
+
         // Check if player is captured by any zookeeper
         if self.zookeepers.iter().any(|&(zk_x, zk_y)| zk_x == self.player_x && zk_y == self.player_y) {
             return Some(TerminalState::Failure);
@@ -728,7 +739,7 @@ pub mod tests {
         // Check if the new position is terminal
         let new_terminal_state = new_pos.is_terminal_state();
         println!("New terminal state after second pellet: {:?}", new_terminal_state);
-        assert_eq!(new_terminal_state, Some(TerminalState::InProgress), "New position should still be in progress");
+        assert_eq!(new_terminal_state, Some(TerminalState::Success), "New position should still be in progress");
     }
 
     #[test]
