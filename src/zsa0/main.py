@@ -37,7 +37,7 @@ def train(
     base_dir: str = "training",
     device: str = str(get_torch_device()),
     # These parameters were chosen based on the results of the nn_sweep and mcts_sweep
-    n_self_play_games: int = 1700,
+    n_self_play_games: int = 17,
     n_mcts_iterations: int = 1400,
     c_exploration: float = 6.6,
     c_ply_penalty: float = 0.01,

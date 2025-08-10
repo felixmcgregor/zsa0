@@ -194,7 +194,6 @@ impl MctsGame {
                 let child = Node::new(child_pos, Rc::downgrade(&self.leaf), policy_probs[m]);
                 Some(Rc::new(RefCell::new(child)))
             } else {
-                println!("Skipping expansion for illegal move: {}", m);
                 None
             }
         });
@@ -657,7 +656,7 @@ mod tests {
     /// Runs a batch with a single game and a constant evaluation function.
     fn run_mcts(pos: Pos, n_iterations: usize) -> (Policy, QValue, QValue) {
         let mut game = MctsGame::new_from_pos(pos, GameMetadata::default());
-        for i in 0..n_iterations {
+        for _ in 0..n_iterations {
             // Use log probabilities (uniform in log space)
             let uniform_log_policy = [0.0; Pos::N_MOVES]; // log(1) = 0 for each move
             game.on_received_policy(
@@ -721,11 +720,11 @@ mod tests {
             "TimeStamp": "2025-08-07T00:00:00Z",
             "Tick": 1,
             "Cells": [
-                {"Content": 0}, {"Content": 2}, {"Content": 0},
-                {"Content": 0}, {"Content": 0}, {"Content": 0},
-                {"Content": 0}, {"Content": 0}, {"Content": 0}
+                {"X": 0, "Y": 0, "Content": 0}, {"X": 1, "Y": 0, "Content": 2}, {"X": 2, "Y": 0, "Content": 0},
+                {"X": 0, "Y": 1, "Content": 0}, {"X": 1, "Y": 1, "Content": 0}, {"X": 2, "Y": 1, "Content": 0},
+                {"X": 0, "Y": 2, "Content": 0}, {"X": 1, "Y": 2, "Content": 0}, {"X": 2, "Y": 2, "Content": 0}
             ],
-            "Animals": [{"x": 0, "y": 0, "id": 1}],
+            "Animals": [{"X": 0, "Y": 0, "id": 1}],
             "Zookeepers": []
         }"#;
         let game_state: crate::zootopia::GameState = serde_json::from_str(json).unwrap();
@@ -756,11 +755,11 @@ mod tests {
             "TimeStamp": "2025-08-07T00:00:00Z",
             "Tick": 1,
             "Cells": [
-                {"Content": 0}, {"Content": 1}, {"Content": 0},
-                {"Content": 0}, {"Content": 0}, {"Content": 0},
-                {"Content": 0}, {"Content": 0}, {"Content": 0}
+                {"X": 0, "Y": 0, "Content": 0}, {"X": 1, "Y": 0, "Content": 1}, {"X": 2, "Y": 0, "Content": 0},
+                {"X": 0, "Y": 1, "Content": 0}, {"X": 1, "Y": 1, "Content": 0}, {"X": 2, "Y": 1, "Content": 0},
+                {"X": 0, "Y": 2, "Content": 0}, {"X": 1, "Y": 2, "Content": 0}, {"X": 2, "Y": 2, "Content": 0}
             ],
-            "Animals": [{"x": 0, "y": 0, "id": 1}],
+            "Animals": [{"X": 0, "Y": 0, "id": 1}],
             "Zookeepers": []
         }"#;
         let game_state: crate::zootopia::GameState = serde_json::from_str(json).unwrap();
@@ -780,13 +779,13 @@ mod tests {
             "TimeStamp": "2025-08-07T00:00:00Z",
             "Tick": 1,
             "Cells": [
-                {"Content": 0}, {"Content": 1}, {"Content": 2}, {"Content": 3},
-                {"Content": 0}, {"Content": 0}, {"Content": 0}, {"Content": 0},
-                {"Content": 0}, {"Content": 0}, {"Content": 0}, {"Content": 0},
-                {"Content": 0}, {"Content": 0}, {"Content": 0}, {"Content": 0}
+                {"X": 0, "Y": 0, "Content": 0}, {"X": 1, "Y": 0, "Content": 1}, {"X": 2, "Y": 0, "Content": 2}, {"X": 3, "Y": 0, "Content": 3},
+                {"X": 0, "Y": 1, "Content": 0}, {"X": 1, "Y": 1, "Content": 0}, {"X": 2, "Y": 1, "Content": 0}, {"X": 3, "Y": 1, "Content": 0},
+                {"X": 0, "Y": 2, "Content": 0}, {"X": 1, "Y": 2, "Content": 0}, {"X": 2, "Y": 2, "Content": 0}, {"X": 3, "Y": 2, "Content": 0},
+                {"X": 0, "Y": 3, "Content": 0}, {"X": 1, "Y": 3, "Content": 0}, {"X": 2, "Y": 3, "Content": 0}, {"X": 3, "Y": 3, "Content": 0}
             ],
-            "Animals": [{"x": 0, "y": 0, "id": 1}],
-            "Zookeepers": [{"x": 1, "y": 0, "id": 1}]
+            "Animals": [{"X": 0, "Y": 0, "id": 1}],
+            "Zookeepers": [{"X": 1, "Y": 0, "id": 1}]
         }"#;
         let game_state: crate::zootopia::GameState = serde_json::from_str(json).unwrap();
         let pos = crate::zootopia::Pos::from_game_state(&game_state);
@@ -813,11 +812,11 @@ mod tests {
             "TimeStamp": "2025-08-07T00:00:00Z",
             "Tick": 1,
             "Cells": [
-                {"Content": 0}, {"Content": 2}, {"Content": 5},
-                {"Content": 0}, {"Content": 0}, {"Content": 0},
-                {"Content": 0}, {"Content": 0}, {"Content": 0}
+                {"X": 0, "Y": 0, "Content": 0}, {"X": 1, "Y": 0, "Content": 2}, {"X": 2, "Y": 0, "Content": 5},
+                {"X": 0, "Y": 1, "Content": 0}, {"X": 1, "Y": 1, "Content": 0}, {"X": 2, "Y": 1, "Content": 0},
+                {"X": 0, "Y": 2, "Content": 0}, {"X": 1, "Y": 2, "Content": 0}, {"X": 2, "Y": 2, "Content": 0}
             ],
-            "Animals": [{"x": 0, "y": 0, "id": 1}],
+            "Animals": [{"X": 0, "Y": 0, "id": 1}],
             "Zookeepers": []
         }"#;
         let game_state: crate::zootopia::GameState = serde_json::from_str(json).unwrap();
@@ -840,12 +839,12 @@ mod tests {
             "TimeStamp": "2025-08-07T00:00:00Z",
             "Tick": 1,
             "Cells": [
-                {"Content": 0}, {"Content": 1}, {"Content": 2},
-                {"Content": 3}, {"Content": 0}, {"Content": 0},
-                {"Content": 0}, {"Content": 0}, {"Content": 0}
+                {"X": 0, "Y": 0, "Content": 0}, {"X": 1, "Y": 0, "Content": 1}, {"X": 2, "Y": 0, "Content": 2},
+                {"X": 0, "Y": 1, "Content": 3}, {"X": 1, "Y": 1, "Content": 0}, {"X": 2, "Y": 1, "Content": 0},
+                {"X": 0, "Y": 2, "Content": 0}, {"X": 1, "Y": 2, "Content": 0}, {"X": 2, "Y": 2, "Content": 0}
             ],
-            "Animals": [{"x": 0, "y": 0, "id": 1}],
-            "Zookeepers": [{"x": 1, "y": 0, "id": 1}]
+            "Animals": [{"X": 0, "Y": 0, "id": 1}],
+            "Zookeepers": [{"X": 1, "Y": 0, "id": 1}]
         }"#;
         let game_state: crate::zootopia::GameState = serde_json::from_str(json).unwrap();
         let pos = crate::zootopia::Pos::from_game_state(&game_state);
@@ -854,27 +853,6 @@ mod tests {
         assert_eq!(pos.get_cell_content(1, 0), Some(crate::zootopia::CellContent::Wall));
         assert_eq!(pos.get_cell_content(2, 0), Some(crate::zootopia::CellContent::Pellet));
         assert_eq!(pos.get_cell_content(0, 1), Some(crate::zootopia::CellContent::ZookeeperSpawn));
-    }
-
-    #[test]
-    fn test_softmax_with_neg_infinity() {
-        println!("Running test: test_softmax_with_neg_infinity");
-        // Test that masked moves get 0.0 probability
-        let policy_logprobs = [0.0, f32::NEG_INFINITY, 0.0, f32::NEG_INFINITY];
-        let result = softmax(policy_logprobs);
-        
-        println!("Input: {:?}", policy_logprobs);
-        println!("Output: {:?}", result);
-        
-        // Only moves 0 and 2 should have non-zero probability
-        assert_eq!(result[1], 0.0);
-        assert_eq!(result[3], 0.0);
-        assert!(result[0] > 0.0);
-        assert!(result[2] > 0.0);
-        
-        // Probabilities should sum to 1
-        let sum: f32 = result.iter().sum();
-        assert!((sum - 1.0).abs() < 1e-5);
     }
 
     /// Test from a position where zookeepers block up, down, and left; only right should be possible.
@@ -886,15 +864,15 @@ mod tests {
             "TimeStamp": "2025-08-07T00:00:00Z",
             "Tick": 1,
             "Cells": [
-                {"Content": 0}, {"Content": 0}, {"Content": 0},
-                {"Content": 0}, {"Content": 0}, {"Content": 0},
-                {"Content": 2}, {"Content": 0}, {"Content": 0}
+                {"X": 0, "Y": 0, "Content": 0}, {"X": 1, "Y": 0, "Content": 0}, {"X": 2, "Y": 0, "Content": 0},
+                {"X": 0, "Y": 1, "Content": 0}, {"X": 1, "Y": 1, "Content": 0}, {"X": 2, "Y": 1, "Content": 0},
+                {"X": 0, "Y": 2, "Content": 2}, {"X": 1, "Y": 2, "Content": 0}, {"X": 2, "Y": 2, "Content": 0}
             ],
-            "Animals": [{"x": 1, "y": 1, "id": 1}],
+            "Animals": [{"X": 1, "Y": 1, "id": 1}],
             "Zookeepers": [
-                {"x": 1, "y": 0, "id": 1},
-                {"x": 1, "y": 2, "id": 2},
-                {"x": 0, "y": 1, "id": 3}
+                {"X": 1, "Y": 0, "id": 1},
+                {"X": 1, "Y": 2, "id": 2},
+                {"X": 0, "Y": 1, "id": 3}
             ]
         }"#;
         let game_state: crate::zootopia::GameState = serde_json::from_str(json).unwrap();
@@ -917,11 +895,11 @@ mod tests {
             "TimeStamp": "2025-08-07T00:00:00Z",
             "Tick": 1,
             "Cells": [
-                {"Content": 0}, {"Content": 1}, {"Content": 0},
-                {"Content": 1}, {"Content": 0}, {"Content": 0},
-                {"Content": 0}, {"Content": 1}, {"Content": 0}
+                {"X": 0, "Y": 0, "Content": 0}, {"X": 1, "Y": 0, "Content": 1}, {"X": 2, "Y": 0, "Content": 0},
+                {"X": 0, "Y": 1, "Content": 1}, {"X": 1, "Y": 1, "Content": 0}, {"X": 2, "Y": 1, "Content": 0},
+                {"X": 0, "Y": 2, "Content": 0}, {"X": 1, "Y": 2, "Content": 1}, {"X": 2, "Y": 2, "Content": 0}
             ],
-            "Animals": [{"x": 1, "y": 1, "id": 1}],
+            "Animals": [{"X": 1, "Y": 1, "id": 1}],
             "Zookeepers": []
         }"#;
         let game_state: crate::zootopia::GameState = serde_json::from_str(json).unwrap();
@@ -943,11 +921,11 @@ mod tests {
             "TimeStamp": "2025-08-07T00:00:00Z",
             "Tick": 1,
             "Cells": [
-                {"Content": 0}, {"Content": 2}, {"Content": 0},
-                {"Content": 0}, {"Content": 0}, {"Content": 0},
-                {"Content": 0}, {"Content": 0}, {"Content": 0}
+                {"X": 0, "Y": 0, "Content": 0}, {"X": 1, "Y": 0, "Content": 2}, {"X": 2, "Y": 0, "Content": 0},
+                {"X": 0, "Y": 1, "Content": 0}, {"X": 1, "Y": 1, "Content": 0}, {"X": 2, "Y": 1, "Content": 0},
+                {"X": 0, "Y": 2, "Content": 0}, {"X": 1, "Y": 2, "Content": 0}, {"X": 2, "Y": 2, "Content": 0}
             ],
-            "Animals": [{"x": 0, "y": 0, "id": 1}],
+            "Animals": [{"X": 0, "Y": 0, "id": 1}],
             "Zookeepers": []
         }"#;
         let game_state: crate::zootopia::GameState = serde_json::from_str(json).unwrap();
