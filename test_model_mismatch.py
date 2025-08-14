@@ -26,6 +26,7 @@ def test_model_loading():
     # Create a new model with current config
     new_model = BottinaNet(current_config)
     print("✅ New model created successfully")
+    print(f"New model config: {new_model.hparams}")
 
     # Check if there are any saved models in the training directory
     training_dir = "/home/felix/personal/zsa0/training"
@@ -37,7 +38,7 @@ def test_model_loading():
                 try:
                     # Try to load the saved model
                     saved_model = torch.load(model_path, map_location="cpu")
-                    print(f"✅ Loaded saved model successfully")
+                    print("✅ Loaded saved model successfully")
 
                     # Check the config
                     if hasattr(saved_model, "hparams"):
@@ -52,7 +53,7 @@ def test_model_loading():
                             )
 
                             if saved_filters != current_config.conv_filter_size:
-                                print(f"🚨 MISMATCH FOUND!")
+                                print("🚨 MISMATCH FOUND!")
                                 print(f"Saved model expects {saved_filters} filters")
                                 print(
                                     f"Current config uses {current_config.conv_filter_size} filters"

@@ -131,7 +131,7 @@ def test_network():
         # Forward pass
         policy, q_values = net(test_input)
 
-        print(f"\n✅ SUCCESS!")
+        print("\n✅ SUCCESS!")
         print(f"Policy shape: {policy.shape} (expected: ({batch_size}, {N_COLS}))")
         print(f"Q values shape: {q_values.shape} (expected: ({batch_size}, 2))")
 

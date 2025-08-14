@@ -4,7 +4,6 @@ Simple test to verify the training works with a fresh start
 """
 
 import torch
-import os
 import shutil
 from pathlib import Path
 
@@ -27,7 +26,7 @@ def test_fresh_training():
                         model = torch.load(
                             model_path, map_location="cpu", weights_only=False
                         )
-                        print("✅ Model loads successfully")
+                        print(f"✅ Model loads successfully {model.hparams}")
                     except Exception as e:
                         print(f"❌ Model is corrupted: {e}")
                         print("🔧 This is the source of your dimension mismatch!")

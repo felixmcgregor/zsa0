@@ -4,7 +4,6 @@ Debug script to identify the exact tensor shape mismatch issue.
 """
 
 import sys
-import os
 
 sys.path.insert(0, "/home/felix/personal/zsa0/src")
 
@@ -101,13 +100,13 @@ def debug_tensor_shapes():
                 print(f"   First sample q_no_penalty: {sample.q_no_penalty}")
 
                 # This is where the crash happens - let's see what the position looks like
-                print(f"   Attempting to convert sample to numpy...")
+                print("   Attempting to convert sample to numpy...")
 
                 try:
                     pos_tensor, policy_tensor, q_penalty_tensor, q_no_penalty_tensor = (
                         sample.to_numpy()
                     )
-                    print(f"   ✅ Sample to_numpy SUCCESS!")
+                    print("   ✅ Sample to_numpy SUCCESS!")
                     print(f"   Position tensor shape: {pos_tensor.shape}")
                     print(f"   Policy tensor shape: {policy_tensor.shape}")
                 except Exception as e:
@@ -117,12 +116,12 @@ def debug_tensor_shapes():
                     try:
                         pos_str = sample.pos_str()
                         print(f"   Position string preview: {pos_str[:200]}...")
-                    except:
-                        print(f"   Could not get position string")
+                    except Exception as e:
+                        print(f"   ❌ Could not get position string: {e}")
             else:
-                print(f"   No samples generated")
+                print("   No samples generated")
         else:
-            print(f"   No games generated")
+            print("   No games generated")
 
     except Exception as e:
         print(f"   ❌ Self-play test FAILED: {e}")

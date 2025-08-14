@@ -44,6 +44,7 @@ uv run maturin develop --release
 ```
 uv run cargo test
 uv run ruff check
+uv run ruff check --fix
 ```
 
 4. Train a network

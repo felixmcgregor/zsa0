@@ -10,7 +10,7 @@ import torchmetrics
 import pytorch_lightning as pl
 from einops import rearrange
 
-from zsa0_rust import N_COLS, N_ROWS, BUF_N_CHANNELS  # type: ignore
+from zsa0_rust import N_COLS, BUF_N_CHANNELS  # type: ignore
 
 # Grid dimensions for the Zootopia game (51x51)
 GRID_HEIGHT = 51
