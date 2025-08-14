@@ -780,7 +780,9 @@ mod tests {
         game = game.with_debug(true);
 
         for _ in 0..n_iterations {
+            // this is where that no backtrack boi would come
             let uniform_log_policy = [0.0; Pos::N_MOVES];
+
             let leaf_pos = game.leaf_pos();
             let (q_penalty, q_no_penalty) = pellet_reward(&leaf_pos);
             game.on_received_policy(
@@ -991,13 +993,13 @@ mod tests {
     /// Test from a position where zookeepers block up, down, and left; only right should be possible.
     #[test]
     fn zookeeper_surrounded_test() {
-        println!("Running test: zookeeper_surrounded_test");
+        println!("Running test: zookeeper_surrounded_test *");
         // Animal at (1,1), zookeepers at (1,0)=up, (1,2)=down, (0,1)=left
         let json = r#"{
             "TimeStamp": "2025-08-07T00:00:00Z",
             "Tick": 1,
             "Cells": [
-                {"X": 0, "Y": 0, "Content": 0}, {"X": 1, "Y": 0, "Content": 0}, {"X": 2, "Y": 0, "Content": 0},
+                {"X": 0, "Y": 0, "Content": 0}, {"X": 1, "Y": 0, "Content": 0}, {"X": 2, "Y": 0, "Content": 2},
                 {"X": 0, "Y": 1, "Content": 0}, {"X": 1, "Y": 1, "Content": 0}, {"X": 2, "Y": 1, "Content": 0},
                 {"X": 0, "Y": 2, "Content": 2}, {"X": 1, "Y": 2, "Content": 0}, {"X": 2, "Y": 2, "Content": 0}
             ],
@@ -1010,7 +1012,9 @@ mod tests {
         }"#;
         let game_state: crate::zootopia::GameState = serde_json::from_str(json).unwrap();
         let pos = crate::zootopia::Pos::from_game_state(&game_state);
-        let (policy, _q_penalty, _q_no_penalty) = run_mcts(pos, 10);
+        // let (policy, _q_penalty, _q_no_penalty) = run_mcts(pos, 100);
+        let (policy, _q_penalty, _q_no_penalty) = run_mcts_with_pellet_reward(pos, 100);
+
         println!("Policy: {:?}", policy);
         // Only right move should be possible
         assert_eq!(policy[0], 0.0, "Up move should be impossible");

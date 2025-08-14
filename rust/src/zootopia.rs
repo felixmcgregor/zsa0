@@ -216,7 +216,7 @@ impl Pos {
             matches!(cell.content, 2 | 5) // Pellet or PowerPellet
         }).count() as u32;
         
-        // Cap target pellets at 20 for training efficiency
+        // Cap target pellets for training efficiency
         let target_pellets = total_pellets.min(5);
 
         Pos {
@@ -263,7 +263,8 @@ impl Pos {
             println!("Player captured by zookeeper at ({}, {})", new_x, new_y);
             new_pos.score = new_pos.score.saturating_sub(1); // Penalize for being caught, clamp to zero
             new_pos.pellets_collected = new_pos.pellets_collected.saturating_sub(3); // Clamp to zero
-            return Some(new_pos);
+            // return Some(new_pos);
+            return None; // rather do this because I dont even want to search this
         }
 
         // Handle pellet collection
@@ -403,8 +404,9 @@ impl Pos {
     /// Determines if the game is over
     pub fn is_terminal_state(&self) -> Option<TerminalState> {
         // Add timeout mechanism to prevent infinite games
-        const MAX_MOVES: u32 = 200; // Reasonable limit for Zootopia games
+        const MAX_MOVES: u32 = 30; // Reasonable limit for Zootopia games
         if self.tick >= MAX_MOVES {
+            println!("Game timeout after {} moves", self.tick);
             return Some(TerminalState::Timeout);
         }
 
@@ -440,6 +442,7 @@ impl Pos {
     /// Mask the policy logprobs by setting illegal moves to f32::NEG_INFINITY
     pub fn mask_policy(&self, policy_logprobs: &mut Policy) {
         let legal_moves = self.legal_moves();
+        // println!("Legal moves: {:?}", legal_moves);
         debug_assert_gt!(
             legal_moves.iter().filter(|&&legal| legal).count(),
             0,
@@ -452,6 +455,7 @@ impl Pos {
                 policy_logprobs[mov] = f32::NEG_INFINITY;
             }
         }
+        // println!("Masked policy: {:?}", policy_logprobs);
     }
 
     /// Returns the terminal value with ply penalty, returns None if game is not over
@@ -572,9 +576,10 @@ impl Pos {
             player_x,
             player_y,
             zookeepers,
-            tick: game_state.tick,
+            // tick: game_state.tick,
+            tick: 0, // start every game from tick 0 to enable tracking timeout
             score: 0, // Could extract from animals if needed
-            target_pellets: pellets_collected + 50, // Estimate based on current pellets
+            target_pellets: pellets_collected + 5, // Estimate based on current pellets
             pellets_collected: 0, // Start fresh
         })
     }
@@ -620,7 +625,7 @@ impl Pos {
             zookeepers,
             tick: game_state.tick,
             score: 0,
-            target_pellets: pellets_collected + 50,
+            target_pellets: pellets_collected + 5,
             pellets_collected: 0,
         })
     }
@@ -776,7 +781,7 @@ pub mod tests {
             "TimeStamp": "2025-08-07T00:00:00Z",
             "Tick": 1,
             "Cells": [
-                {"X": 0, "Y": 0, "Content": 0}, {"X": 1, "Y": 0, "Content": 0}, {"X": 2, "Y": 0, "Content": 2},
+                {"X": 0, "Y": 0, "Content": 0}, {"X": 1, "Y": 0, "Content": 1}, {"X": 2, "Y": 0, "Content": 2},
                 {"X": 0, "Y": 1, "Content": 0}, {"X": 1, "Y": 1, "Content": 0}, {"X": 2, "Y": 1, "Content": 0},
                 {"X": 0, "Y": 2, "Content": 0}, {"X": 1, "Y": 2, "Content": 0}, {"X": 2, "Y": 2, "Content": 0}
             ],
@@ -785,13 +790,12 @@ pub mod tests {
         }"#;
         let game_state: GameState = serde_json::from_str(json).unwrap();
         let pos = Pos::from_game_state(&game_state);
-        assert_eq!(pos.width, 4);
-        assert_eq!(pos.height, 4);
+        assert_eq!(pos.width, 3);
+        assert_eq!(pos.height, 3);
         assert_eq!(pos.player_x, 0);
         assert_eq!(pos.player_y, 0);
         assert_eq!(pos.get_cell_content(1, 0), Some(CellContent::Wall));
         assert_eq!(pos.get_cell_content(2, 0), Some(CellContent::Pellet));
-        assert_eq!(pos.get_cell_content(3, 0), Some(CellContent::ZookeeperSpawn));
     }
 
     #[test]
@@ -816,7 +820,6 @@ pub mod tests {
         assert_eq!(pos.player_y, 0);
         assert_eq!(pos.get_cell_content(1, 0), Some(crate::zootopia::CellContent::Wall));
         assert_eq!(pos.get_cell_content(2, 0), Some(crate::zootopia::CellContent::Pellet));
-        assert_eq!(pos.get_cell_content(0, 1), Some(crate::zootopia::CellContent::ZookeeperSpawn));
     }
     
     #[test]
@@ -924,17 +927,6 @@ pub mod tests {
     }
 
     #[test]
-    fn test_zookeeper_capture() {
-        let mut pos = Pos::default();
-        // Place a zookeeper to the right of the player (at position 26,25)
-        pos.zookeepers = vec![(26, 25)];
-        
-        // Moving right should result in capture
-        let new_pos = pos.make_move(Move::Right).unwrap();
-        assert_eq!(new_pos.is_terminal_state(), Some(TerminalState::Failure));
-    }
-
-    #[test]
     fn test_zookeeper_avoidance() {
         let mut pos = Pos::default();
         // Place a zookeeper to the left of the player (at position 24,25)
@@ -945,8 +937,12 @@ pub mod tests {
         assert_eq!(new_pos.is_terminal_state(), Some(TerminalState::InProgress));
         
         // Moving left should result in capture
-        let captured_pos = pos.make_move(Move::Left).unwrap();
-        assert_eq!(captured_pos.is_terminal_state(), Some(TerminalState::Failure));
+        // let captured_pos = pos.make_move(Move::Left).unwrap();
+        // assert_eq!(captured_pos.is_terminal_state(), Some(TerminalState::Failure));
+        
+        // check that you cant move left into the zookeeper
+        assert!(pos.make_move(Move::Left).is_none(), "Left move should be illegal due to zookeeper");
+        
     }
 
     #[test]
@@ -1014,9 +1010,8 @@ pub mod tests {
         
         assert_eq!(pos.zookeeper_positions(), &[(1, 0)]);
         
-        // Moving right should result in capture
-        let new_pos = pos.make_move(Move::Right).unwrap();
-        assert_eq!(new_pos.is_terminal_state(), Some(TerminalState::Failure));
+        // Moving right should not be allowed due to zookeeper
+        assert!(pos.make_move(Move::Right).is_none(), "Right move should be illegal due to zookeeper");
     }
 }
 
