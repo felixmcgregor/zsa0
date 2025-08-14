@@ -16,7 +16,7 @@ import torch
 
 from zsa0.nn import BottinaNet
 import zsa0_rust  # type: ignore
-from zsa0_rust import N_COLS  # type: ignore
+N_MOVES = 4
 
 PlayerName = NewType("PlayerName", str)
 
@@ -59,7 +59,7 @@ class RandomPlayer(Player):
 
     def forward_numpy(self, x: np.ndarray) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
         batch_size = x.shape[0]
-        policy_logits = torch.rand(batch_size, N_COLS).numpy()
+        policy_logits = torch.rand(batch_size, N_MOVES).numpy()
         q_value = (torch.rand(batch_size) * 2 - 1).numpy()  # [-1, 1]
         return policy_logits, q_value, q_value
 
@@ -72,7 +72,7 @@ class UniformPlayer(Player):
 
     def forward_numpy(self, x: np.ndarray) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
         batch_size = x.shape[0]
-        policy_logits = torch.ones(batch_size, N_COLS).numpy()
+        policy_logits = torch.ones(batch_size, N_MOVES).numpy()
         q_value = torch.zeros(batch_size).numpy()
         return policy_logits, q_value, q_value
 

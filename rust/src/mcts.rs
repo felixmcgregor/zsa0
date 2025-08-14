@@ -634,7 +634,7 @@ impl Node {
                 child_counts.map(|c| c / child_counts_sum)
             }
         } else {
-            println!("Warning: no children, returning uniform policy.");
+            // print!("* Warning: no children, returning uniform policy.");
             MctsGame::UNIFORM_POLICY
         }
     }

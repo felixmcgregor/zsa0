@@ -212,13 +212,15 @@ fn draw_game_grid(pos: &Pos, rect: Rect, buf: &mut Buffer) {
             );
             
             let (cell_char, style) = if (x, y) == pos.player_position() {
-                ('🐾', Style::default().green().bold()) // Animal/Player
+                // ('🐾', Style::default().green().bold()) // Animal/Player
+                ('P', Style::default().green().bold()) // Animal/Player
             } else if pos.zookeeper_positions().iter().any(|&(zx, zy)| zx == x && zy == y) {
-                ('👮', Style::default().red().bold()) // Zookeeper
+                // ('👮', Style::default().red().bold()) // Zookeeper
+                ('Z', Style::default().red().bold()) // Zookeeper
             } else {
                 match pos.get_cell_content(x, y) {
                     Some(crate::zootopia::CellContent::Empty) => (' ', Style::default()),
-                    Some(crate::zootopia::CellContent::Wall) => ('█', Style::default().white()),
+                    Some(crate::zootopia::CellContent::Wall) => ('X', Style::default().white()),
                     Some(crate::zootopia::CellContent::Pellet) => ('•', Style::default().yellow()),
                     Some(crate::zootopia::CellContent::ZookeeperSpawn) => ('Z', Style::default().red()),
                     Some(crate::zootopia::CellContent::AnimalSpawn) => ('A', Style::default().green()),

@@ -28,7 +28,7 @@ from zsa0.training import (  # noqa: E402
 from zsa0.utils import get_torch_device  # noqa: E402
 
 import zsa0_rust  # noqa: E402
-
+print(zsa0_rust.__file__)
 app = typer.Typer()
 
 
@@ -100,8 +100,8 @@ def play(
     model: str = "best",
 ):
     """Play interactive games"""
-    gen = TrainingGen.load_latest(base_dir)
     if model == "best":
+        gen = TrainingGen.load_latest(base_dir)
         nn = gen.get_model(base_dir)
     elif model == "random":
         nn = RandomPlayer(ModelID(0))

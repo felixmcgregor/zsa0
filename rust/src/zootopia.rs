@@ -146,13 +146,18 @@ impl Default for Pos {
             // Place pellets near the player for easier testing
             cells[25 * 51 + 26] = 2; // Pellet at (26, 25) - one move right from player
             cells[24 * 51 + 25] = 2;  // Pellet at (25, 24) - one move up from player
+
+            cells[20 * 51 + 20] = 3; // Zookeeper spawn at (20, 20)
+            // walls around the player
+            cells[25 * 51 + 24] = 1; // Wall at (24, 25) - left of player
             Pos {
                 width: 51,
                 height: 51,
                 cells,
-                player_x: 25,
-                player_y: 25,
-                zookeepers: vec![],
+                player_x: 30,
+                player_y: 30,
+                // zookeepers: vec![],
+                zookeepers: vec![(20, 20), (30, 30)], // Example zookeeper positions
                 tick: 0,
                 score: 0,
                 target_pellets: 5,
