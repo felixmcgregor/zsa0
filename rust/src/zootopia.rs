@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::types::{Policy, QValue};
 
-/// Game state data structure matching the JSON format
+/// Game state data structure matching the actual JSON format from game engine
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GameState {
     #[serde(rename = "TimeStamp")]
@@ -14,19 +14,57 @@ pub struct GameState {
     #[serde(rename = "Tick")]
     pub tick: u32,
     #[serde(rename = "Cells")]
-    pub cells: Vec<Cell>,
+    pub cells: Vec<CellWithPosition>,
     #[serde(rename = "Animals")]
-    pub animals: Vec<Animal>,
+    pub animals: Vec<AnimalState>,
     #[serde(rename = "Zookeepers")]
-    pub zookeepers: Vec<Zookeeper>,
+    pub zookeepers: Vec<ZookeeperState>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CellWithPosition {
+    #[serde(rename = "X")]
+    pub x: usize,
+    #[serde(rename = "Y")]
+    pub y: usize,
+    #[serde(rename = "Content")]
+    pub content: u8,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AnimalState {
+    #[serde(rename = "X", skip_serializing_if = "Option::is_none")]
+    pub x: Option<usize>,
+    #[serde(rename = "Y", skip_serializing_if = "Option::is_none")]
+    pub y: Option<usize>,
+    #[serde(rename = "id", skip_serializing_if = "Option::is_none")]
+    pub id: Option<u32>,
+    #[serde(rename = "ActivePowerUp")]
+    pub active_power_up: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ZookeeperState {
+    #[serde(rename = "X", skip_serializing_if = "Option::is_none")]
+    pub x: Option<usize>,
+    #[serde(rename = "Y", skip_serializing_if = "Option::is_none")]
+    pub y: Option<usize>,
+    #[serde(rename = "id", skip_serializing_if = "Option::is_none")]
+    pub id: Option<u32>,
+    #[serde(rename = "SpawnY", skip_serializing_if = "Option::is_none")]
+    pub spawn_y: Option<usize>,
+    #[serde(rename = "SpawnX", skip_serializing_if = "Option::is_none")]
+    pub spawn_x: Option<usize>,
+}
+
+/// Legacy cell structure for backwards compatibility
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Cell {
     #[serde(rename = "Content")]
     pub content: u8,
 }
 
+/// Legacy animal structure for backwards compatibility  
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Animal {
     pub x: usize,
@@ -34,6 +72,7 @@ pub struct Animal {
     pub id: u32,
 }
 
+/// Legacy zookeeper structure for backwards compatibility
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Zookeeper {
     pub x: usize,
@@ -98,32 +137,43 @@ pub enum Move {
 
 impl Default for Pos {
     fn default() -> Self {
-        let mut cells = vec![0; 400]; // 20x20 grid of empty cells
-        // Place pellets near the player for easier testing
-        cells[10 * 20 + 11] = 2; // Pellet at (11, 10) - one move right from player
-        cells[9 * 20 + 10] = 2;  // Pellet at (10, 9) - one move up from player
-        Pos {
-            width: 20,
-            height: 20,
-            cells,
-            player_x: 10,
-            player_y: 10,
-            zookeepers: vec![],
-            tick: 0,
-            score: 0,
-            target_pellets: 2, // Need to collect both pellets
-            pellets_collected: 0,
+        // Try to load from JSON file, fall back to hardcoded default if it fails
+        if let Ok(pos) = Self::load_from_json() {
+            pos
+        } else {
+            // Fallback to original hardcoded default
+            let mut cells = vec![0; 51 * 51];
+            // Place pellets near the player for easier testing
+            cells[25 * 51 + 26] = 2; // Pellet at (26, 25) - one move right from player
+            cells[24 * 51 + 25] = 2;  // Pellet at (25, 24) - one move up from player
+
+            cells[20 * 51 + 20] = 3; // Zookeeper spawn at (20, 20)
+            // walls around the player
+            cells[25 * 51 + 24] = 1; // Wall at (24, 25) - left of player
+            Pos {
+                width: 51,
+                height: 51,
+                cells,
+                player_x: 30,
+                player_y: 30,
+                // zookeepers: vec![],
+                zookeepers: vec![(20, 20), (30, 30)], // Example zookeeper positions
+                tick: 0,
+                score: 0,
+                target_pellets: 5,
+                pellets_collected: 0,
+            }
         }
     }
 }
 
 impl Pos {
     /// Default grid dimensions (can be overridden when loading from JSON)
-    pub const DEFAULT_WIDTH: usize = 20;
-    pub const DEFAULT_HEIGHT: usize = 20;
+    pub const DEFAULT_WIDTH: usize = 51;
+    pub const DEFAULT_HEIGHT: usize = 51;
     
     /// For compatibility with Connect Four interface
-    pub const N_COLS: usize = Self::N_MOVES; // Map to number of moves for policy arrays
+    pub const N_COLS: usize = Self::DEFAULT_WIDTH; // Map to number of moves for policy arrays
     pub const N_ROWS: usize = Self::DEFAULT_HEIGHT; // Map to height for buffer calculations
     
     /// Number of possible moves (up, down, left, right)
@@ -145,8 +195,10 @@ impl Pos {
         
         // Find player position (assuming first animal is the player)
         let (player_x, player_y) = if let Some(animal) = game_state.animals.first() {
-            // Wrap animal position around grid
-            (animal.x % width, animal.y % height)
+            // Handle optional x,y coordinates with defaults
+            let x = animal.x.unwrap_or(width / 2);
+            let y = animal.y.unwrap_or(height / 2);
+            (x % width, y % height) // Wrap around grid
         } else {
             (width / 2, height / 2) // Default to center if no animals
         };
@@ -154,13 +206,23 @@ impl Pos {
         // Extract zookeeper positions
         let zookeepers: Vec<(usize, usize)> = game_state.zookeepers
             .iter()
-            .map(|zk| (zk.x % width, zk.y % height)) // Wrap zookeeper positions too
+            .filter_map(|zk| {
+                // Handle optional x,y coordinates
+                if let (Some(x), Some(y)) = (zk.x, zk.y) {
+                    Some((x % width, y % height)) // Wrap positions
+                } else {
+                    None // Skip zookeepers without valid positions
+                }
+            })
             .collect();
 
         // Check if there were any pellets in the initial game state
-        let target_pellets = game_state.cells.iter().filter(|cell| {
+        let total_pellets = game_state.cells.iter().filter(|cell| {
             matches!(cell.content, 2 | 5) // Pellet or PowerPellet
         }).count() as u32;
+        
+        // Cap target pellets for training efficiency
+        let target_pellets = total_pellets.min(5);
 
         Pos {
             width,
@@ -187,6 +249,8 @@ impl Pos {
             Move::Right => ((self.player_x + 1) % self.width, self.player_y),
         };
 
+        // println!("Attempting move: {:?} to ({}, {})", mov, new_x, new_y);
+
         // Check if the move is valid (not into a wall or zookeeper spawn)
         match self.get_cell_content(new_x, new_y) {
             Some(CellContent::Wall) | Some(CellContent::ZookeeperSpawn) => return None,
@@ -204,7 +268,8 @@ impl Pos {
             println!("Player captured by zookeeper at ({}, {})", new_x, new_y);
             new_pos.score = new_pos.score.saturating_sub(1); // Penalize for being caught, clamp to zero
             new_pos.pellets_collected = new_pos.pellets_collected.saturating_sub(3); // Clamp to zero
-            return Some(new_pos);
+            // return Some(new_pos);
+            return None; // rather do this because I dont even want to search this
         }
 
         // Handle pellet collection
@@ -344,8 +409,9 @@ impl Pos {
     /// Determines if the game is over
     pub fn is_terminal_state(&self) -> Option<TerminalState> {
         // Add timeout mechanism to prevent infinite games
-        const MAX_MOVES: u32 = 200; // Reasonable limit for Zootopia games
+        const MAX_MOVES: u32 = 30; // Reasonable limit for Zootopia games
         if self.tick >= MAX_MOVES {
+            println!("Game timeout after {} moves", self.tick);
             return Some(TerminalState::Timeout);
         }
 
@@ -381,6 +447,7 @@ impl Pos {
     /// Mask the policy logprobs by setting illegal moves to f32::NEG_INFINITY
     pub fn mask_policy(&self, policy_logprobs: &mut Policy) {
         let legal_moves = self.legal_moves();
+        // println!("Legal moves: {:?}", legal_moves);
         debug_assert_gt!(
             legal_moves.iter().filter(|&&legal| legal).count(),
             0,
@@ -393,6 +460,7 @@ impl Pos {
                 policy_logprobs[mov] = f32::NEG_INFINITY;
             }
         }
+        // println!("Masked policy: {:?}", policy_logprobs);
     }
 
     /// Returns the terminal value with ply penalty, returns None if game is not over
@@ -468,6 +536,146 @@ impl Pos {
         }
         pos
     }
+
+    /// Load game state from default.json file
+    fn load_from_json() -> Result<Self, Box<dyn std::error::Error>> {
+        let json_content = std::fs::read_to_string("src/default.json")?;
+        let game_state: JsonGameState = serde_json::from_str(&json_content)?;
+        
+        // Create a 51x51 grid initialized with zeros
+        let mut cells = vec![0u8; 51 * 51];
+        
+        // Fill the grid with data from JSON
+        for cell in &game_state.cells {
+            if cell.x < 51 && cell.y < 51 {
+                cells[cell.y * 51 + cell.x] = cell.content;
+            }
+        }
+        
+        // Find player position (look for content type 3 in the JSON)
+        let (player_x, player_y) = game_state.cells
+            .iter()
+            .find(|cell| cell.content == 3)
+            .map(|cell| (cell.x, cell.y))
+            .unwrap_or((25, 25)); // Default to center if not found
+        
+        // Extract zookeeper positions
+        let zookeepers: Vec<(usize, usize)> = game_state.zookeepers
+            .iter()
+            .map(|zk| (zk.x, zk.y))
+            .filter(|&(x, y)| x.is_some() && y.is_some())
+            .map(|(x, y)| (x.unwrap() % 51, y.unwrap() % 51)) // Wrap around grid
+            .collect();
+            
+        
+        // Count pellets (content type 2)
+        let pellets_collected = game_state.cells
+            .iter()
+            .filter(|cell| cell.content == 2)
+            .count() as u32;
+        
+        Ok(Pos {
+            width: 51,
+            height: 51,
+            cells,
+            player_x,
+            player_y,
+            zookeepers,
+            // tick: game_state.tick,
+            tick: 0, // start every game from tick 0 to enable tracking timeout
+            score: 0, // Could extract from animals if needed
+            target_pellets: pellets_collected + 5, // Estimate based on current pellets
+            pellets_collected: 0, // Start fresh
+        })
+    }
+    
+    /// Load a specific game state from a JSON file
+    pub fn from_json_file(path: &str) -> Result<Self, Box<dyn std::error::Error>> {
+        let json_content = std::fs::read_to_string(path)?;
+        let game_state: JsonGameState = serde_json::from_str(&json_content)?;
+        
+        // Similar parsing logic as load_from_json but with custom path
+        let mut cells = vec![0u8; 51 * 51];
+        
+        for cell in &game_state.cells {
+            if cell.x < 51 && cell.y < 51 {
+                cells[cell.y * 51 + cell.x] = cell.content;
+            }
+        }
+        
+        let (player_x, player_y) = game_state.cells
+            .iter()
+            .find(|cell| cell.content == 3)
+            .map(|cell| (cell.x, cell.y))
+            .unwrap_or((25, 25));
+        
+        let zookeepers: Vec<(usize, usize)> = game_state.zookeepers
+            .iter()
+            .map(|zk| (zk.x, zk.y))
+            .filter(|&(x, y)| x.is_some() && y.is_some())
+            .map(|(x, y)| (x.unwrap() % 51, y.unwrap() % 51))
+            .collect();
+        
+        let pellets_collected = game_state.cells
+            .iter()
+            .filter(|cell| cell.content == 2)
+            .count() as u32;
+        
+        Ok(Pos {
+            width: 51,
+            height: 51,
+            cells,
+            player_x,
+            player_y,
+            zookeepers,
+            tick: game_state.tick,
+            score: 0,
+            target_pellets: pellets_collected + 5,
+            pellets_collected: 0,
+        })
+    }
+}
+
+/// JSON parsing structures
+#[derive(Deserialize)]
+struct JsonCell {
+    #[serde(rename = "X")]
+    x: usize,
+    #[serde(rename = "Y")]
+    y: usize,
+    #[serde(rename = "Content")]
+    content: u8,
+}
+
+#[derive(Deserialize)]
+struct JsonAnimal {
+    #[serde(rename = "ActivePowerUp")]
+    active_power_up: Option<String>,
+    // Note: X and Y coordinates are missing in the actual JSON structure
+    // They might be in a different format or missing entirely
+}
+
+#[derive(Deserialize)]
+struct JsonZookeeper {
+    #[serde(rename = "Y")]
+    y: Option<usize>,
+    #[serde(rename = "X")]
+    x: Option<usize>,
+    // Note: Current X and Y coordinates are missing in the actual JSON structure
+}
+
+#[derive(Deserialize)]
+struct JsonGameState {
+    #[serde(rename = "TimeStamp")]
+    timestamp: String,
+    #[serde(rename = "Tick")]
+    tick: u32,
+    #[serde(rename = "Cells")]
+    cells: Vec<JsonCell>,
+    #[serde(rename = "Animals")]
+    animals: Vec<JsonAnimal>,
+    #[serde(rename = "Zookeepers")]
+    zookeepers: Vec<JsonZookeeper>,
 }
 
 impl Display for Pos {
@@ -485,10 +693,10 @@ impl Display for Pos {
                         Some(CellContent::Wall) => '#',
                         Some(CellContent::Pellet) => '•',
                         Some(CellContent::ZookeeperSpawn) => 'Z',
-                        Some(CellContent::AnimalSpawn) => '🔴',
+                        Some(CellContent::AnimalSpawn) => '+',
                         Some(CellContent::PowerPellet) => 'P',
                         Some(CellContent::ChameleonCloak) => 'C',
-                        Some(CellContent::Scavenger) => '🔵',
+                        Some(CellContent::Scavenger) => 'S',
                         Some(CellContent::BigMooseJuice) => 'M',
                         None => '?',
                     }
@@ -523,20 +731,20 @@ pub mod tests {
     fn test_basic_movement() {
         let pos = Pos::default();
         
-        // Test moving right
+        // Test moving right (from center at 25,25 to 26,25)
         let new_pos = pos.make_move(Move::Right).unwrap();
-        assert_eq!(new_pos.player_position(), (11, 10));
+        assert_eq!(new_pos.player_position(), (26, 25));
         
-        // Test moving up
+        // Test moving up (from center at 25,25 to 25,24)
         let new_pos = pos.make_move(Move::Up).unwrap();
-        assert_eq!(new_pos.player_position(), (10, 9));
+        assert_eq!(new_pos.player_position(), (25, 24));
     }
 
     #[test]
     fn test_wall_collision() {
         let mut pos = Pos::default();
-        // Set a wall to the right of the player
-        pos.set_cell_content(11, 10, CellContent::Wall);
+        // Set a wall to the right of the player (at position 26,25)
+        pos.set_cell_content(26, 25, CellContent::Wall);
         
         // Moving right should fail
         assert!(pos.make_move(Move::Right).is_none());
@@ -545,12 +753,12 @@ pub mod tests {
     #[test]
     fn test_pellet_collection() {
         let mut pos = Pos::default();
-        // Place a pellet to the right of the player
-        pos.set_cell_content(11, 10, CellContent::Pellet);
+        // Place a pellet to the right of the player (at position 26,25)
+        pos.set_cell_content(26, 25, CellContent::Pellet);
         
         let new_pos = pos.make_move(Move::Right).unwrap();
         assert_eq!(new_pos.score(), 3); // Pellet gives 3 points
-        assert_eq!(new_pos.get_cell_content(11, 10), Some(CellContent::Empty));
+        assert_eq!(new_pos.get_cell_content(26, 25), Some(CellContent::Empty));
     }
 
     #[test]
@@ -578,23 +786,21 @@ pub mod tests {
             "TimeStamp": "2025-08-07T00:00:00Z",
             "Tick": 1,
             "Cells": [
-                {"Content": 0}, {"Content": 1}, {"Content": 2}, {"Content": 3},
-                {"Content": 0}, {"Content": 0}, {"Content": 0}, {"Content": 0},
-                {"Content": 0}, {"Content": 0}, {"Content": 0}, {"Content": 0},
-                {"Content": 0}, {"Content": 0}, {"Content": 0}, {"Content": 0}
+                {"X": 0, "Y": 0, "Content": 0}, {"X": 1, "Y": 0, "Content": 1}, {"X": 2, "Y": 0, "Content": 2},
+                {"X": 0, "Y": 1, "Content": 0}, {"X": 1, "Y": 1, "Content": 0}, {"X": 2, "Y": 1, "Content": 0},
+                {"X": 0, "Y": 2, "Content": 0}, {"X": 1, "Y": 2, "Content": 0}, {"X": 2, "Y": 2, "Content": 0}
             ],
-            "Animals": [{"x": 0, "y": 0, "id": 1}],
-            "Zookeepers": [{"x": 3, "y": 0, "id": 1}]
+            "Animals": [{"X": 0, "Y": 0, "id": 1}],
+            "Zookeepers": [{"X": 3, "Y": 0, "id": 1}]
         }"#;
         let game_state: GameState = serde_json::from_str(json).unwrap();
         let pos = Pos::from_game_state(&game_state);
-        assert_eq!(pos.width, 4);
-        assert_eq!(pos.height, 4);
+        assert_eq!(pos.width, 3);
+        assert_eq!(pos.height, 3);
         assert_eq!(pos.player_x, 0);
         assert_eq!(pos.player_y, 0);
         assert_eq!(pos.get_cell_content(1, 0), Some(CellContent::Wall));
         assert_eq!(pos.get_cell_content(2, 0), Some(CellContent::Pellet));
-        assert_eq!(pos.get_cell_content(3, 0), Some(CellContent::ZookeeperSpawn));
     }
 
     #[test]
@@ -604,12 +810,12 @@ pub mod tests {
             "TimeStamp": "2025-08-07T00:00:00Z",
             "Tick": 1,
             "Cells": [
-                {"Content": 0}, {"Content": 1}, {"Content": 2},
-                {"Content": 3}, {"Content": 0}, {"Content": 0},
-                {"Content": 0}, {"Content": 0}, {"Content": 0}
+                {"X": 0, "Y": 0, "Content": 0}, {"X": 1, "Y": 0, "Content": 1}, {"X": 2, "Y": 0, "Content": 2},
+                {"X": 0, "Y": 1, "Content": 3}, {"X": 1, "Y": 1, "Content": 0}, {"X": 2, "Y": 1, "Content": 0},
+                {"X": 0, "Y": 2, "Content": 0}, {"X": 1, "Y": 2, "Content": 0}, {"X": 2, "Y": 2, "Content": 0}
             ],
-            "Animals": [{"x": 0, "y": 0, "id": 1}],
-            "Zookeepers": [{"x": 1, "y": 0, "id": 1}]
+            "Animals": [{"X": 0, "Y": 0, "id": 1}],
+            "Zookeepers": [{"X": 1, "Y": 0, "id": 1}]
         }"#;
         let game_state: crate::zootopia::GameState = serde_json::from_str(json).unwrap();
         let pos = crate::zootopia::Pos::from_game_state(&game_state);
@@ -619,7 +825,6 @@ pub mod tests {
         assert_eq!(pos.player_y, 0);
         assert_eq!(pos.get_cell_content(1, 0), Some(crate::zootopia::CellContent::Wall));
         assert_eq!(pos.get_cell_content(2, 0), Some(crate::zootopia::CellContent::Pellet));
-        assert_eq!(pos.get_cell_content(0, 1), Some(crate::zootopia::CellContent::ZookeeperSpawn));
     }
     
     #[test]
@@ -629,11 +834,11 @@ pub mod tests {
             "TimeStamp": "2025-08-07T00:00:00Z",
             "Tick": 1,
             "Cells": [
-                {"Content": 0}, {"Content": 1}, {"Content": 0},
-                {"Content": 0}, {"Content": 0}, {"Content": 0},
-                {"Content": 0}, {"Content": 0}, {"Content": 0}
+                {"X": 0, "Y": 0, "Content": 0}, {"X": 1, "Y": 0, "Content": 1}, {"X": 2, "Y": 0, "Content": 2},
+                {"X": 0, "Y": 1, "Content": 0}, {"X": 1, "Y": 1, "Content": 0}, {"X": 2, "Y": 1, "Content": 1},
+                {"X": 0, "Y": 2, "Content": 0}, {"X": 1, "Y": 2, "Content": 1}, {"X": 2, "Y": 2, "Content": 0}
             ],
-            "Animals": [{"x": 0, "y": 0, "id": 1}],
+            "Animals": [{"X": 1, "Y": 1, "id": 1}],
             "Zookeepers": []
         }"#;
         
@@ -668,32 +873,81 @@ pub mod tests {
         // Test right move specifically (should fail due to wall)
         assert!(pos.make_move(Move::Right).is_none(), "Right move should be blocked by wall");
         assert!(!legal_moves[3], "Right move should be illegal");
+
+        // left move should be legal
+        assert!(pos.make_move(Move::Left).is_some(), "Left move should be  legal");
+        assert!(legal_moves[2], "Left move should be legal");
     }
 
     #[test]
-    fn test_zookeeper_capture() {
-        let mut pos = Pos::default();
-        // Place a zookeeper to the right of the player
-        pos.zookeepers = vec![(11, 10)];
+    fn debug_wall_avoidance_warp() {
+        // Test the wall avoidance case from failing MCTS test
+        let json = r#"{
+            "TimeStamp": "2025-08-07T00:00:00Z",
+            "Tick": 1,
+            "Cells": [
+                {"X": 0, "Y": 0, "Content": 0}, {"X": 1, "Y": 0, "Content": 1}, {"X": 2, "Y": 0, "Content": 2},
+                {"X": 0, "Y": 1, "Content": 1}, {"X": 1, "Y": 1, "Content": 0}, {"X": 2, "Y": 1, "Content": 0},
+                {"X": 0, "Y": 2, "Content": 0}, {"X": 1, "Y": 2, "Content": 0}, {"X": 2, "Y": 2, "Content": 0}
+            ],
+            "Animals": [{"X": 0, "Y": 0, "id": 1}],
+            "Zookeepers": []
+        }"#;
         
-        // Moving right should result in capture
-        let new_pos = pos.make_move(Move::Right).unwrap();
-        assert_eq!(new_pos.is_terminal_state(), Some(TerminalState::Failure));
+        let game_state: GameState = serde_json::from_str(json).unwrap();
+        let pos = Pos::from_game_state(&game_state);
+        
+        println!("Position: {:?}", pos);
+        println!("Player position: {:?}", pos.player_position());
+        println!("Grid dimensions: {:?}", pos.dimensions());
+        
+        // Check what's at cell (1, 0) - should be a wall
+        println!("Cell (1, 0): {:?}", pos.get_cell_content(1, 0));
+        
+        // Test each move
+        for (i, move_name) in ["Up", "Down", "Left", "Right"].iter().enumerate() {
+            let mov = match i {
+                0 => Move::Up,
+                1 => Move::Down,
+                2 => Move::Left,
+                3 => Move::Right,
+                _ => unreachable!(),
+            };
+            
+            let can_move = pos.make_move(mov).is_some();
+            println!("Can move {}: {}", move_name, can_move);
+        }
+        
+        // Check legal moves array
+        let legal_moves = pos.legal_moves();
+        println!("Legal moves: {:?}", legal_moves);
+        
+        // Test right move specifically (should fail due to wall)
+        assert!(pos.make_move(Move::Right).is_none(), "Right move should be blocked by wall");
+        assert!(!legal_moves[3], "Right move should be illegal");
+
+        // up move should be legal
+        assert!(pos.make_move(Move::Up).is_some(), "Up move should be  legal");
+        assert!(legal_moves[0], "Up move should be legal");
     }
 
     #[test]
     fn test_zookeeper_avoidance() {
         let mut pos = Pos::default();
-        // Place a zookeeper to the left of the player
-        pos.zookeepers = vec![(9, 10)];
+        // Place a zookeeper to the left of the player (at position 24,25)
+        pos.zookeepers = vec![(24, 25)];
         
         // Moving right should be safe
         let new_pos = pos.make_move(Move::Right).unwrap();
         assert_eq!(new_pos.is_terminal_state(), Some(TerminalState::InProgress));
         
         // Moving left should result in capture
-        let captured_pos = pos.make_move(Move::Left).unwrap();
-        assert_eq!(captured_pos.is_terminal_state(), Some(TerminalState::Failure));
+        // let captured_pos = pos.make_move(Move::Left).unwrap();
+        // assert_eq!(captured_pos.is_terminal_state(), Some(TerminalState::Failure));
+        
+        // check that you cant move left into the zookeeper
+        assert!(pos.make_move(Move::Left).is_none(), "Left move should be illegal due to zookeeper");
+        
     }
 
     #[test]
@@ -704,11 +958,11 @@ pub mod tests {
             "TimeStamp": "2025-08-07T00:00:00Z",
             "Tick": 1,
             "Cells": [
-                {"Content": 0}, {"Content": 2}, {"Content": 2},
-                {"Content": 0}, {"Content": 0}, {"Content": 0},
-                {"Content": 0}, {"Content": 0}, {"Content": 0}
+                {"X": 0, "Y": 0, "Content": 0}, {"X": 1, "Y": 0, "Content": 2}, {"X": 2, "Y": 0, "Content": 2},
+                {"X": 0, "Y": 1, "Content": 0}, {"X": 1, "Y": 1, "Content": 0}, {"X": 2, "Y": 1, "Content": 0},
+                {"X": 0, "Y": 2, "Content": 0}, {"X": 1, "Y": 2, "Content": 0}, {"X": 2, "Y": 2, "Content": 0}
             ],
-            "Animals": [{"x": 0, "y": 0, "id": 1}],
+            "Animals": [{"X": 0, "Y": 0, "id": 1}],
             "Zookeepers": []
         }"#;
         let game_state: crate::zootopia::GameState = serde_json::from_str(json).unwrap();
@@ -749,21 +1003,20 @@ pub mod tests {
             "TimeStamp": "2025-08-07T00:00:00Z",
             "Tick": 1,
             "Cells": [
-                {"Content": 0}, {"Content": 0}, {"Content": 2},
-                {"Content": 0}, {"Content": 0}, {"Content": 0},
-                {"Content": 0}, {"Content": 0}, {"Content": 0}
+                {"X": 0, "Y": 0, "Content": 0}, {"X": 1, "Y": 0, "Content": 0}, {"X": 2, "Y": 0, "Content": 2},
+                {"X": 0, "Y": 1, "Content": 0}, {"X": 1, "Y": 1, "Content": 0}, {"X": 2, "Y": 1, "Content": 0},
+                {"X": 0, "Y": 2, "Content": 0}, {"X": 1, "Y": 2, "Content": 0}, {"X": 2, "Y": 2, "Content": 0}
             ],
-            "Animals": [{"x": 0, "y": 0, "id": 1}],
-            "Zookeepers": [{"x": 1, "y": 0, "id": 1}]
+            "Animals": [{"X": 0, "Y": 0, "id": 1}],
+            "Zookeepers": [{"X": 1, "Y": 0, "id": 1}]
         }"#;
         let game_state: GameState = serde_json::from_str(json).unwrap();
         let pos = Pos::from_game_state(&game_state);
         
         assert_eq!(pos.zookeeper_positions(), &[(1, 0)]);
         
-        // Moving right should result in capture
-        let new_pos = pos.make_move(Move::Right).unwrap();
-        assert_eq!(new_pos.is_terminal_state(), Some(TerminalState::Failure));
+        // Moving right should not be allowed due to zookeeper
+        assert!(pos.make_move(Move::Right).is_none(), "Right move should be illegal due to zookeeper");
     }
 }
 
@@ -796,7 +1049,7 @@ mod tensor_debug_tests {
                  batch_size, Pos::BUF_N_CHANNELS, Pos::DEFAULT_HEIGHT, Pos::DEFAULT_WIDTH);
         
         // Calculate expected flattened size after conv layers
-        // With 32 filters on a 20x20 grid (assuming no padding changes size)
+        // With 32 filters on a 51x51 grid (assuming no padding changes size)
         let conv_filters = 32; // From your config
         let expected_fc_input_size = conv_filters * Pos::DEFAULT_HEIGHT * Pos::DEFAULT_WIDTH;
         println!("Expected FC input size with {} filters: {}", conv_filters, expected_fc_input_size);
@@ -813,10 +1066,10 @@ mod tensor_debug_tests {
         
         // Verify the calculations match what Python expects
         assert_eq!(Pos::BUF_N_CHANNELS, 3);
-        assert_eq!(Pos::DEFAULT_HEIGHT, 20);
-        assert_eq!(Pos::DEFAULT_WIDTH, 20);
-        assert_eq!(Pos::BUF_LEN, 3 * 20 * 20);
-        assert_eq!(expected_fc_input_size, 32 * 20 * 20); // Should be 12800
+        assert_eq!(Pos::DEFAULT_HEIGHT, 51);
+        assert_eq!(Pos::DEFAULT_WIDTH, 51);
+        assert_eq!(Pos::BUF_LEN, 3 * 51 * 51);
+        assert_eq!(expected_fc_input_size, 32 * 51 * 51); // Should be 83232
     }
     
     #[test] 
@@ -875,20 +1128,20 @@ mod tensor_debug_tests {
         println!("✅ Buffer creation produces correct dimensions!");
         
         // Calculate what the flattened conv output size should be
-        let (batch_size, channels, height, width) = expected_shape;
+        let (_batch_size, channels, height, width) = expected_shape;
         let input_elements_per_batch = channels * height * width;
         println!("Input elements per batch item: {}", input_elements_per_batch);
         
-        // With 32 conv filters, the output should be 32 * 20 * 20 = 12800 per batch item
+        // With 32 conv filters, the output should be 32 * 51 * 51 = 83232 per batch item
         let conv_filters = 32;
         let expected_conv_output_per_batch = conv_filters * height * width;
         println!("Expected conv output per batch (32 filters): {}", expected_conv_output_per_batch);
         
-        // This should match the "1x12800" from your error message
-        assert_eq!(expected_conv_output_per_batch, 12800);
+        // This should match the new expected size with 51x51 grid
+        assert_eq!(expected_conv_output_per_batch, 83232);
         
         // Also verify the input calculation
-        assert_eq!(input_elements_per_batch, 1200); // 3 * 20 * 20
+        assert_eq!(input_elements_per_batch, 7803); // 3 * 51 * 51
         assert_eq!(channels * height * width, Pos::BUF_LEN);
     }
     

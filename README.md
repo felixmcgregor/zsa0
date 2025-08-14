@@ -14,7 +14,7 @@ The game logic, Monte Carlo Tree Search, and multi-threaded self play engine is 
 The NN is written in Python/PyTorch [here](https://github.com/felixmcgregor/zsa0/tree/master/src/zsa0?ts=2)
 and interfaces with rust via [PyO3](https://pyo3.rs/v0.22.2/)
 
-![Terminal UI](https://raw.githubusercontent.com/felixmcgregor/zsa0/refs/heads/master/images/tui.png)
+![Terminal UI](https://raw.githubusercontent.com/felixmcgregor/zsa0/refs/heads/main/images/tui.png)
 
 ## Usage
 

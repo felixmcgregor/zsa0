@@ -12,9 +12,9 @@ from einops import rearrange
 
 from zsa0_rust import N_COLS, N_ROWS, BUF_N_CHANNELS  # type: ignore
 
-# Grid dimensions for the Zootopia game (20x20)
-GRID_HEIGHT = 20
-GRID_WIDTH = 20
+# Grid dimensions for the Zootopia game (51x51)
+GRID_HEIGHT = 51
+GRID_WIDTH = 51
 
 
 class ModelConfig(BaseModel):
@@ -136,7 +136,7 @@ class BottinaNet(pl.LightningModule):
     def _calculate_conv_output_size(self):
         """Helper function to calculate the output size of the convolutional block."""
         # Apply the convolutional layers to a dummy input with correct dimensions
-        # The game grid is 20x20 for Zootopia
+        # The game grid is 51x51 for Zootopia
         dummy_input = torch.zeros(1, BUF_N_CHANNELS, GRID_HEIGHT, GRID_WIDTH)
         with torch.no_grad():
             dummy_output = self.conv(dummy_input)

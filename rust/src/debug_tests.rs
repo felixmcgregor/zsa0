@@ -9,11 +9,11 @@ mod debug_tests {
             "TimeStamp": "2025-08-07T00:00:00Z",
             "Tick": 1,
             "Cells": [
-                {"Content": 0}, {"Content": 1}, {"Content": 0},
-                {"Content": 0}, {"Content": 0}, {"Content": 0},
-                {"Content": 0}, {"Content": 0}, {"Content": 0}
+                {"X": 0, "Y": 0, "Content": 0}, {"X": 1, "Y": 0, "Content": 1}, {"X": 2, "Y": 0, "Content": 0},
+                {"X": 0, "Y": 1, "Content": 0}, {"X": 1, "Y": 1, "Content": 0}, {"X": 2, "Y": 1, "Content": 0},
+                {"X": 0, "Y": 2, "Content": 0}, {"X": 1, "Y": 2, "Content": 0}, {"X": 2, "Y": 2, "Content": 0}
             ],
-            "Animals": [{"x": 0, "y": 0, "id": 1}],
+            "Animals": [{"X": 0, "Y": 0, "id": 1}],
             "Zookeepers": []
         }"#;
         

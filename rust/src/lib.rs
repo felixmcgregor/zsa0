@@ -23,6 +23,7 @@ fn zsa0_rust(_py: Python, m: &Bound<'_, PyModule>) -> PyResult<()> {
 
     m.add("N_COLS", Pos::N_COLS)?;
     m.add("N_ROWS", Pos::N_ROWS)?;
+    m.add("N_MOVES", Pos::N_MOVES)?;
     m.add("BUF_N_CHANNELS", Pos::BUF_N_CHANNELS)?;
 
     m.add_class::<GameMetadata>()?;

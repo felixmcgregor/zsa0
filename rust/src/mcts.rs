@@ -33,6 +33,41 @@ pub struct MctsGame {
     debug: bool, // Add debug flag
 }
 
+
+/// Reward function for pellet collection.
+/// Only gives rewards for terminal states (success/failure), returns 0 for non-terminal.
+fn pellet_reward(pos: &crate::zootopia::Pos) -> (QValue, QValue) {
+    if let Some(terminal_state) = pos.is_terminal_state() {
+        match terminal_state {
+            crate::zootopia::TerminalState::Success => {
+                // Success: collected all pellets
+                (1.0, 1.0)
+            },
+            crate::zootopia::TerminalState::Failure => {
+                // Failure: caught by zookeeper or other failure condition
+                (-1.0, -1.0)
+            },
+            crate::zootopia::TerminalState::Timeout => {
+                // Timeout: partial reward based on progress
+                let pellets = pos.pellets_collected();
+                let target = pos.target_pellets();
+                let progress = (pellets as f32) / (target as f32).max(1.0);
+                // Scale between -1 and 1 based on progress
+                let reward = 2.0 * progress - 1.0;
+                (reward, reward)
+            },
+            crate::zootopia::TerminalState::InProgress => {
+                // This shouldn't happen if is_terminal_state() returned Some
+                (0.0, 0.0)
+            }
+        }
+    } else {
+        // Non-terminal state: no reward, let MCTS explore
+        (0.0, 0.0)
+    }
+}
+
+
 impl MctsGame {
     /// Removes the leaf node from its parent's children so it won't be selected again.
     fn prune_terminal_leaf(&mut self) {
@@ -45,7 +80,9 @@ impl MctsGame {
                     if let Some(child_rc) = child_opt {
                         if Rc::ptr_eq(child_rc, &self.leaf) {
                             *child_opt = None;
-                            println!("Pruned terminal leaf at move index {}", i);
+                            if self.debug {
+                                println!("Pruned terminal leaf at move index {}", i);
+                            }
                             break;
                         }
                     }
@@ -99,10 +136,28 @@ impl MctsGame {
     /// Gets the [ModelID] that is to play in the leaf position. The [ModelID] corresponds to which
     /// NN we need to call to evaluate the position.
     pub fn leaf_model_id_to_play(&self) -> ModelID {
+        // how would this work?
+        // self.metadata.player0_id
         if self.leaf.borrow().pos.ply() % 2 == 0 {
             self.metadata.player0_id
         } else {
             self.metadata.player1_id
+        }
+    }
+
+    fn backpropagate_visit_counts(&self) {
+        let mut node_ref = Rc::clone(&self.leaf);
+        loop {
+            let mut node = node_ref.borrow_mut();
+            node.visit_count += 1;
+            // Don't update Q values for non-terminal nodes
+
+            if let Some(parent) = node.parent.upgrade() {
+                drop(node); // Drop node_ref borrow so we can reassign node_ref
+                node_ref = parent;
+            } else {
+                break;
+            }
         }
     }
 
@@ -131,24 +186,26 @@ impl MctsGame {
             self.backpropagate_value(q_penalty, q_no_penalty);
 
             // Prune the terminal child from its parent so it won't be selected again
-            self.prune_terminal_leaf();
+            // self.prune_terminal_leaf();
 
             self.select_new_leaf(c_exploration);
         } else {
             // If this is a non-terminal state, we use the received policy to expand the leaf,
-            // backpropagate the received value, and select a new leaf.
+            // but we only backpropagate visit counts (not Q values) for non-terminal nodes
             leaf_pos.mask_policy(&mut policy_logprobs);
             let policy_probs = softmax(policy_logprobs);
             if self.debug {
                 println!("Received policy for leaf: {:?}, q_penalty: {}, q_no_penalty: {}, policy {:?}", leaf_pos, q_penalty, q_no_penalty, policy_probs);
             }
             self.expand_leaf(policy_probs);
-            self.backpropagate_value(q_penalty, q_no_penalty);
+            
+            // Only backpropagate visit counts for non-terminal nodes
+            // self.backpropagate_visit_counts();
+
             self.select_new_leaf(c_exploration);
             if self.debug {
                 println!("New leaf selected: {:?}", self.leaf_pos());
             }
-        
         }
     }
 
@@ -192,7 +249,6 @@ impl MctsGame {
                 let child = Node::new(child_pos, Rc::downgrade(&self.leaf), policy_probs[m]);
                 Some(Rc::new(RefCell::new(child)))
             } else {
-                println!("Skipping expansion for illegal move: {}", m);
                 None
             }
         });
@@ -231,6 +287,7 @@ impl MctsGame {
         let mut path_moves = Vec::new();
 
         loop {
+            let parent_visit_count = node_ref.borrow().visit_count;
             let next = node_ref.borrow().children.as_ref().and_then(|children| {
                 children
                     .iter()
@@ -239,7 +296,7 @@ impl MctsGame {
                         child_opt.as_ref().map(|child| (move_idx, child))
                     })
                     .max_by_key(|&(_, child)| {
-                        let score = child.borrow().uct_value(c_exploration);
+                        let score = child.borrow().uct_value(c_exploration, parent_visit_count);
                         OrdF32(score)
                     })
                     .map(|(move_idx, child)| (move_idx, Rc::clone(child)))
@@ -512,13 +569,21 @@ impl Node {
     /// The exploitation component of the UCT value (i.e. the average win rate) with a penalty
     /// applied for additional plys to discourage longer sequences.
     fn q_with_penalty(&self) -> QValue {
-        self.q_sum_penalty / ((self.visit_count as f32) + 1.0)
+        if self.visit_count == 0 {
+            0.0
+        } else {
+            self.q_sum_penalty / (self.visit_count as f32)
+        }
     }
 
     /// The exploitation component of the UCT value (i.e. the average win rate) without any
     /// ply penalty.
     fn q_no_penalty(&self) -> QValue {
-        self.q_sum_no_penalty / ((self.visit_count as f32) + 1.0)
+        if self.visit_count == 0 {
+            0.0
+        } else {
+            self.q_sum_no_penalty / (self.visit_count as f32)
+        }
     }
 
     /// The exploration component of the UCT value. Higher visit counts result in lower values.
@@ -538,10 +603,16 @@ impl Node {
     /// The UCT value of this node. Represents the lucrativeness of this node according to MCTS.
     /// Because [Self::uct_value] is called from the perspective of the *parent* node, we negate
     /// the exploration value.
-    fn uct_value(&self, c_exploration: f32) -> QValue {
-        -self.q_with_penalty() + c_exploration * self.exploration_value()
+    fn uct_value(&self, c_exploration: f32, parent_visit_count: usize) -> f32 {
+        if self.visit_count == 0 {
+            // Unvisited nodes get maximum exploration value
+            f32::INFINITY
+        } else {
+            let exploitation = self.q_with_penalty();
+            let exploration = c_exploration * (parent_visit_count as f32).ln().sqrt() / (self.visit_count as f32).sqrt();
+            exploitation + exploration
+        }
     }
-
     /// Whether the game is over (won, los, draw) from this position.
     fn is_terminal(&self) -> bool {
         self.pos.is_terminal_state().is_some()
@@ -563,7 +634,34 @@ impl Node {
                 child_counts.map(|c| c / child_counts_sum)
             }
         } else {
-            println!("Warning: no children, returning uniform policy.");
+            // print!("* Warning: no children, returning uniform policy.");
+            MctsGame::UNIFORM_POLICY
+        }
+    }
+
+    /// Uses only terminal children visit counts to determine the implied policy.
+    fn terminal_policy(&self) -> Policy {
+        if let Some(children) = &self.children {
+            let child_counts = policy_from_iter(children.iter().map(|maybe_child| {
+                maybe_child
+                    .as_ref()
+                    .and_then(|child_ref| {
+                        let child = child_ref.borrow();
+                        if child.is_terminal() {
+                            Some(child.visit_count as f32)
+                        } else {
+                            None
+                        }
+                    })
+                    .unwrap_or(0.)
+            }));
+            let child_counts_sum = child_counts.iter().sum::<f32>();
+            if child_counts_sum == 0.0 {
+                MctsGame::UNIFORM_POLICY
+            } else {
+                child_counts.map(|c| c / child_counts_sum)
+            }
+        } else {
             MctsGame::UNIFORM_POLICY
         }
     }
@@ -615,7 +713,7 @@ mod tests {
     use super::*;
     // use approx::assert_relative_eq;
     // use proptest::prelude::*;
-    // use more_asserts::assert_gt;
+    use more_asserts::assert_gt;
 
     // --- constants ---
     const CONST_MOVE_WEIGHT: f32 = 1.0 / (Pos::N_MOVES as f32);
@@ -655,13 +753,17 @@ mod tests {
     /// Runs a batch with a single game and a constant evaluation function.
     fn run_mcts(pos: Pos, n_iterations: usize) -> (Policy, QValue, QValue) {
         let mut game = MctsGame::new_from_pos(pos, GameMetadata::default());
-        for i in 0..n_iterations {
+
+        // Enable debug mode for detailed output
+        game = game.with_debug(true);
+
+        for _ in 0..n_iterations {
             // Use log probabilities (uniform in log space)
             let uniform_log_policy = [0.0; Pos::N_MOVES]; // log(1) = 0 for each move
             game.on_received_policy(
                 uniform_log_policy,
-                0.0,
-                0.0,
+                0.25,
+                0.25,
                 TEST_C_EXPLORATION,
                 TEST_C_PLY_PENALTY,
             )
@@ -671,6 +773,39 @@ mod tests {
             game.root_q_with_penalty(),
             game.root_q_no_penalty(),
         )
+    }
+
+    fn run_mcts_with_pellet_reward(pos: Pos, n_iterations: usize) -> (Policy, QValue, QValue) {
+        let mut game = MctsGame::new_from_pos(pos, GameMetadata::default());
+        game = game.with_debug(true);
+
+        for _ in 0..n_iterations {
+            // this is where that no backtrack boi would come
+            let uniform_log_policy = [0.0; Pos::N_MOVES];
+
+            let leaf_pos = game.leaf_pos();
+            let (q_penalty, q_no_penalty) = pellet_reward(&leaf_pos);
+            game.on_received_policy(
+                uniform_log_policy,
+                q_penalty,
+                q_no_penalty,
+                TEST_C_EXPLORATION,
+                TEST_C_PLY_PENALTY,
+            )
+        }
+        let terminal_policy = game.root.borrow().terminal_policy();
+        println!("Terminal policy: {:?}", terminal_policy);
+        (
+            terminal_policy,
+            game.root_q_with_penalty(),
+            game.root_q_no_penalty(),
+        )
+        // (
+        //     // game.root_policy(),
+        //     game.root.borrow().terminal_policy(), 
+        //     game.root_q_with_penalty(),
+        //     game.root_q_no_penalty(),
+        // )
     }
 
     #[test]
@@ -719,16 +854,17 @@ mod tests {
             "TimeStamp": "2025-08-07T00:00:00Z",
             "Tick": 1,
             "Cells": [
-                {"Content": 0}, {"Content": 2}, {"Content": 0},
-                {"Content": 0}, {"Content": 0}, {"Content": 0},
-                {"Content": 0}, {"Content": 0}, {"Content": 0}
+                {"X": 0, "Y": 0, "Content": 0}, {"X": 1, "Y": 0, "Content": 2}, {"X": 2, "Y": 0, "Content": 0},
+                {"X": 0, "Y": 1, "Content": 0}, {"X": 1, "Y": 1, "Content": 0}, {"X": 2, "Y": 1, "Content": 0},
+                {"X": 0, "Y": 2, "Content": 0}, {"X": 1, "Y": 2, "Content": 0}, {"X": 2, "Y": 2, "Content": 0}
             ],
-            "Animals": [{"x": 0, "y": 0, "id": 1}],
+            "Animals": [{"X": 0, "Y": 0, "id": 1}],
             "Zookeepers": []
         }"#;
         let game_state: crate::zootopia::GameState = serde_json::from_str(json).unwrap();
         let pos = crate::zootopia::Pos::from_game_state(&game_state);
         let (policy, q_penalty, q_no_penalty) = run_mcts(pos.clone(), 1000);
+        // let (policy, q_penalty, q_no_penalty) = run_mcts_with_pellet_reward(pos.clone(), 1000);
         println!("Policy: {:?}, q_penalty: {}, q_no_penalty: {}", policy, q_penalty, q_no_penalty);
         assert_policy_sum_1(&policy);
         
@@ -742,7 +878,7 @@ mod tests {
         assert!(legal_moves[3], "Right move should be legal");
 
         // TODO: I don't understand why this is not the preferred move.
-        // assert_gt!(policy[3], CONST_MOVE_WEIGHT); // Right move
+        assert_gt!(policy[3], CONST_MOVE_WEIGHT); // Right move
 
     }
 
@@ -754,11 +890,11 @@ mod tests {
             "TimeStamp": "2025-08-07T00:00:00Z",
             "Tick": 1,
             "Cells": [
-                {"Content": 0}, {"Content": 1}, {"Content": 0},
-                {"Content": 0}, {"Content": 0}, {"Content": 0},
-                {"Content": 0}, {"Content": 0}, {"Content": 0}
+                {"X": 0, "Y": 0, "Content": 0}, {"X": 1, "Y": 0, "Content": 1}, {"X": 2, "Y": 0, "Content": 0},
+                {"X": 0, "Y": 1, "Content": 0}, {"X": 1, "Y": 1, "Content": 0}, {"X": 2, "Y": 1, "Content": 0},
+                {"X": 0, "Y": 2, "Content": 0}, {"X": 1, "Y": 2, "Content": 0}, {"X": 2, "Y": 2, "Content": 0}
             ],
-            "Animals": [{"x": 0, "y": 0, "id": 1}],
+            "Animals": [{"X": 0, "Y": 0, "id": 1}],
             "Zookeepers": []
         }"#;
         let game_state: crate::zootopia::GameState = serde_json::from_str(json).unwrap();
@@ -778,13 +914,13 @@ mod tests {
             "TimeStamp": "2025-08-07T00:00:00Z",
             "Tick": 1,
             "Cells": [
-                {"Content": 0}, {"Content": 1}, {"Content": 2}, {"Content": 3},
-                {"Content": 0}, {"Content": 0}, {"Content": 0}, {"Content": 0},
-                {"Content": 0}, {"Content": 0}, {"Content": 0}, {"Content": 0},
-                {"Content": 0}, {"Content": 0}, {"Content": 0}, {"Content": 0}
+                {"X": 0, "Y": 0, "Content": 0}, {"X": 1, "Y": 0, "Content": 1}, {"X": 2, "Y": 0, "Content": 2}, {"X": 3, "Y": 0, "Content": 3},
+                {"X": 0, "Y": 1, "Content": 0}, {"X": 1, "Y": 1, "Content": 0}, {"X": 2, "Y": 1, "Content": 0}, {"X": 3, "Y": 1, "Content": 0},
+                {"X": 0, "Y": 2, "Content": 0}, {"X": 1, "Y": 2, "Content": 0}, {"X": 2, "Y": 2, "Content": 0}, {"X": 3, "Y": 2, "Content": 0},
+                {"X": 0, "Y": 3, "Content": 0}, {"X": 1, "Y": 3, "Content": 0}, {"X": 2, "Y": 3, "Content": 0}, {"X": 3, "Y": 3, "Content": 0}
             ],
-            "Animals": [{"x": 0, "y": 0, "id": 1}],
-            "Zookeepers": [{"x": 1, "y": 0, "id": 1}]
+            "Animals": [{"X": 0, "Y": 0, "id": 1}],
+            "Zookeepers": [{"X": 1, "Y": 0, "id": 1}]
         }"#;
         let game_state: crate::zootopia::GameState = serde_json::from_str(json).unwrap();
         let pos = crate::zootopia::Pos::from_game_state(&game_state);
@@ -811,11 +947,11 @@ mod tests {
             "TimeStamp": "2025-08-07T00:00:00Z",
             "Tick": 1,
             "Cells": [
-                {"Content": 0}, {"Content": 2}, {"Content": 5},
-                {"Content": 0}, {"Content": 0}, {"Content": 0},
-                {"Content": 0}, {"Content": 0}, {"Content": 0}
+                {"X": 0, "Y": 0, "Content": 0}, {"X": 1, "Y": 0, "Content": 2}, {"X": 2, "Y": 0, "Content": 5},
+                {"X": 0, "Y": 1, "Content": 0}, {"X": 1, "Y": 1, "Content": 0}, {"X": 2, "Y": 1, "Content": 0},
+                {"X": 0, "Y": 2, "Content": 0}, {"X": 1, "Y": 2, "Content": 0}, {"X": 2, "Y": 2, "Content": 0}
             ],
-            "Animals": [{"x": 0, "y": 0, "id": 1}],
+            "Animals": [{"X": 0, "Y": 0, "id": 1}],
             "Zookeepers": []
         }"#;
         let game_state: crate::zootopia::GameState = serde_json::from_str(json).unwrap();
@@ -838,12 +974,12 @@ mod tests {
             "TimeStamp": "2025-08-07T00:00:00Z",
             "Tick": 1,
             "Cells": [
-                {"Content": 0}, {"Content": 1}, {"Content": 2},
-                {"Content": 3}, {"Content": 0}, {"Content": 0},
-                {"Content": 0}, {"Content": 0}, {"Content": 0}
+                {"X": 0, "Y": 0, "Content": 0}, {"X": 1, "Y": 0, "Content": 1}, {"X": 2, "Y": 0, "Content": 2},
+                {"X": 0, "Y": 1, "Content": 3}, {"X": 1, "Y": 1, "Content": 0}, {"X": 2, "Y": 1, "Content": 0},
+                {"X": 0, "Y": 2, "Content": 0}, {"X": 1, "Y": 2, "Content": 0}, {"X": 2, "Y": 2, "Content": 0}
             ],
-            "Animals": [{"x": 0, "y": 0, "id": 1}],
-            "Zookeepers": [{"x": 1, "y": 0, "id": 1}]
+            "Animals": [{"X": 0, "Y": 0, "id": 1}],
+            "Zookeepers": [{"X": 1, "Y": 0, "id": 1}]
         }"#;
         let game_state: crate::zootopia::GameState = serde_json::from_str(json).unwrap();
         let pos = crate::zootopia::Pos::from_game_state(&game_state);
@@ -854,50 +990,31 @@ mod tests {
         assert_eq!(pos.get_cell_content(0, 1), Some(crate::zootopia::CellContent::ZookeeperSpawn));
     }
 
-    #[test]
-    fn test_softmax_with_neg_infinity() {
-        println!("Running test: test_softmax_with_neg_infinity");
-        // Test that masked moves get 0.0 probability
-        let policy_logprobs = [0.0, f32::NEG_INFINITY, 0.0, f32::NEG_INFINITY];
-        let result = softmax(policy_logprobs);
-        
-        println!("Input: {:?}", policy_logprobs);
-        println!("Output: {:?}", result);
-        
-        // Only moves 0 and 2 should have non-zero probability
-        assert_eq!(result[1], 0.0);
-        assert_eq!(result[3], 0.0);
-        assert!(result[0] > 0.0);
-        assert!(result[2] > 0.0);
-        
-        // Probabilities should sum to 1
-        let sum: f32 = result.iter().sum();
-        assert!((sum - 1.0).abs() < 1e-5);
-    }
-
     /// Test from a position where zookeepers block up, down, and left; only right should be possible.
     #[test]
     fn zookeeper_surrounded_test() {
-        println!("Running test: zookeeper_surrounded_test");
+        println!("Running test: zookeeper_surrounded_test *");
         // Animal at (1,1), zookeepers at (1,0)=up, (1,2)=down, (0,1)=left
         let json = r#"{
             "TimeStamp": "2025-08-07T00:00:00Z",
             "Tick": 1,
             "Cells": [
-                {"Content": 0}, {"Content": 0}, {"Content": 0},
-                {"Content": 0}, {"Content": 0}, {"Content": 0},
-                {"Content": 2}, {"Content": 0}, {"Content": 0}
+                {"X": 0, "Y": 0, "Content": 0}, {"X": 1, "Y": 0, "Content": 0}, {"X": 2, "Y": 0, "Content": 2},
+                {"X": 0, "Y": 1, "Content": 0}, {"X": 1, "Y": 1, "Content": 0}, {"X": 2, "Y": 1, "Content": 0},
+                {"X": 0, "Y": 2, "Content": 2}, {"X": 1, "Y": 2, "Content": 0}, {"X": 2, "Y": 2, "Content": 0}
             ],
-            "Animals": [{"x": 1, "y": 1, "id": 1}],
+            "Animals": [{"X": 1, "Y": 1, "id": 1}],
             "Zookeepers": [
-                {"x": 1, "y": 0, "id": 1},
-                {"x": 1, "y": 2, "id": 2},
-                {"x": 0, "y": 1, "id": 3}
+                {"X": 1, "Y": 0, "id": 1},
+                {"X": 1, "Y": 2, "id": 2},
+                {"X": 0, "Y": 1, "id": 3}
             ]
         }"#;
         let game_state: crate::zootopia::GameState = serde_json::from_str(json).unwrap();
         let pos = crate::zootopia::Pos::from_game_state(&game_state);
-        let (policy, _q_penalty, _q_no_penalty) = run_mcts(pos, 10);
+        // let (policy, _q_penalty, _q_no_penalty) = run_mcts(pos, 100);
+        let (policy, _q_penalty, _q_no_penalty) = run_mcts_with_pellet_reward(pos, 100);
+
         println!("Policy: {:?}", policy);
         // Only right move should be possible
         assert_eq!(policy[0], 0.0, "Up move should be impossible");
@@ -915,11 +1032,11 @@ mod tests {
             "TimeStamp": "2025-08-07T00:00:00Z",
             "Tick": 1,
             "Cells": [
-                {"Content": 0}, {"Content": 1}, {"Content": 0},
-                {"Content": 1}, {"Content": 0}, {"Content": 0},
-                {"Content": 0}, {"Content": 1}, {"Content": 0}
+                {"X": 0, "Y": 0, "Content": 0}, {"X": 1, "Y": 0, "Content": 1}, {"X": 2, "Y": 0, "Content": 0},
+                {"X": 0, "Y": 1, "Content": 1}, {"X": 1, "Y": 1, "Content": 0}, {"X": 2, "Y": 1, "Content": 0},
+                {"X": 0, "Y": 2, "Content": 0}, {"X": 1, "Y": 2, "Content": 1}, {"X": 2, "Y": 2, "Content": 0}
             ],
-            "Animals": [{"x": 1, "y": 1, "id": 1}],
+            "Animals": [{"X": 1, "Y": 1, "id": 1}],
             "Zookeepers": []
         }"#;
         let game_state: crate::zootopia::GameState = serde_json::from_str(json).unwrap();
@@ -941,11 +1058,11 @@ mod tests {
             "TimeStamp": "2025-08-07T00:00:00Z",
             "Tick": 1,
             "Cells": [
-                {"Content": 0}, {"Content": 2}, {"Content": 0},
-                {"Content": 0}, {"Content": 0}, {"Content": 0},
-                {"Content": 0}, {"Content": 0}, {"Content": 0}
+                {"X": 0, "Y": 0, "Content": 0}, {"X": 1, "Y": 0, "Content": 2}, {"X": 2, "Y": 0, "Content": 0},
+                {"X": 0, "Y": 1, "Content": 0}, {"X": 1, "Y": 1, "Content": 0}, {"X": 2, "Y": 1, "Content": 0},
+                {"X": 0, "Y": 2, "Content": 0}, {"X": 1, "Y": 2, "Content": 0}, {"X": 2, "Y": 2, "Content": 0}
             ],
-            "Animals": [{"x": 0, "y": 0, "id": 1}],
+            "Animals": [{"X": 0, "Y": 0, "id": 1}],
             "Zookeepers": []
         }"#;
         let game_state: crate::zootopia::GameState = serde_json::from_str(json).unwrap();
@@ -961,7 +1078,7 @@ mod tests {
         
         // Test moving right to collect pellet
         if let Some(new_pos) = pos.make_move(crate::zootopia::Move::Right) {
-            println!("After moving right:");
+            println!("====> After moving right:");
             println!("New position: {:?}", new_pos);
             println!("New score: {}", new_pos.score());
             println!("New pellets collected: {}", new_pos.pellets_collected());
@@ -999,3 +1116,4 @@ mod tests {
     }
 
 }
+

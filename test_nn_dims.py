@@ -10,8 +10,8 @@ from einops import rearrange
 
 # Constants from the Rust module (hardcoded for testing)
 BUF_N_CHANNELS = 3  # From Rust: 3 channels
-GRID_HEIGHT = 20    # From Rust: DEFAULT_HEIGHT = 20
-GRID_WIDTH = 20     # From Rust: DEFAULT_WIDTH = 20
+GRID_HEIGHT = 51    # From Rust: DEFAULT_HEIGHT = 51
+GRID_WIDTH = 51     # From Rust: DEFAULT_WIDTH = 51
 N_COLS = 4          # From Rust: N_MOVES = 4 (up, down, left, right)
 
 class SimpleResidualBlock(nn.Module):

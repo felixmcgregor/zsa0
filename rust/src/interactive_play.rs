@@ -172,7 +172,7 @@ impl<E: EvalPosT> State<E> {
         if pos.is_terminal_state().is_some() || !pos.legal_moves()[move_index] {
             return false;
         }
-        self.game.make_move(mov, self.c_exploration);
+        let _ = self.game.make_move(mov, self.c_exploration);
         true
     }
 

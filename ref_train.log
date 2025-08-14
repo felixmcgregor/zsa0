@@ -1,0 +1,314 @@
+Epoch 12: 100%|██████████████████████████████████████████████████████████████████████████████████████████████████| 57/57 [00:03<00:00, 17.35it/s, v_num=38, train_loss=0.057, val_loss=0.0838]
+2025-08-10 09:36:30.971 | INFO     | c4a0.training:train_single_gen:234 - Finished training                                                                                                   
+2025-08-10 09:36:31.049 | INFO     | c4a0.training:train_single_gen:186 - Beginning new generation 30 from 29
+  [00:00:39] [#############################################################################################################################################] 1700/1700 games (43.2886/s games)
+  [00:00:39] MCTS iterations: 6781124 (172,673.9544/s it)                                                                                                                                     Generated 1700 games with 3019 unique positions
+2025-08-10 09:37:10.356 | INFO     | c4a0.training:train_single_gen:213 - Skipping scoring against solver
+2025-08-10 09:37:10.356 | INFO     | c4a0.training:train_single_gen:217 - Beginning training
+GPU available: True (cuda), used: True
+TPU available: False, using: 0 TPU cores
+HPU available: False, using: 0 HPUs
+LOCAL_RANK: 0 - CUDA_VISIBLE_DEVICES: [0]
+2025-08-10 09:37:12.149 | INFO     | c4a0.nn:configure_optimizers:149 - using lr 0.0008 for gen_n 30
+
+  | Name             | Type             | Params | Mode 
+--------------------------------------------------------------
+0 | conv             | Sequential       | 19.2 K | train
+1 | fc_policy        | Sequential       | 5.4 M  | train
+2 | fc_value         | Sequential       | 1.8 M  | train
+3 | policy_kl_div    | KLDivergence     | 0      | train
+4 | q_penalty_mse    | MeanSquaredError | 0      | train
+5 | q_no_penalty_mse | MeanSquaredError | 0      | train
+--------------------------------------------------------------
+7.3 M     Trainable params
+0         Non-trainable params
+7.3 M     Total params
+29.091    Total estimated model params size (MB)
+33        Modules in train mode
+0         Modules in eval mode
+Epoch 13: 100%|█████████████████████████████████████████████████████████████████████████████████████████████████| 57/57 [00:03<00:00, 17.38it/s, v_num=39, train_loss=0.0502, val_loss=0.0881]
+2025-08-10 09:37:58.272 | INFO     | c4a0.training:train_single_gen:234 - Finished training                                                                                                   
+2025-08-10 09:38:02.216 | INFO     | __main__:score:223 - Getting games for: 30
+2025-08-10 09:38:30.609 | INFO     | __main__:score:233 - Gen 30 has score: 0.8237355351448059
+2025-08-10 09:38:30.609 | INFO     | __main__:score:223 - Getting games for: 29
+2025-08-10 09:38:30.998 | INFO     | __main__:score:233 - Gen 29 has score: 0.8237355351448059
+2025-08-10 09:38:30.999 | INFO     | __main__:score:223 - Getting games for: 28
+2025-08-10 09:38:31.375 | INFO     | __main__:score:233 - Gen 28 has score: 0.8237355351448059
+2025-08-10 09:38:31.376 | INFO     | __main__:score:223 - Getting games for: 27
+2025-08-10 09:38:31.744 | INFO     | __main__:score:233 - Gen 27 has score: 0.8237355351448059
+2025-08-10 09:38:31.744 | INFO     | __main__:score:223 - Getting games for: 26
+2025-08-10 09:38:32.116 | INFO     | __main__:score:233 - Gen 26 has score: 0.8237355351448059
+2025-08-10 09:38:32.116 | INFO     | __main__:score:223 - Getting games for: 25
+2025-08-10 09:38:32.502 | INFO     | __main__:score:233 - Gen 25 has score: 0.8237355351448059
+2025-08-10 09:38:32.502 | INFO     | __main__:score:223 - Getting games for: 24
+2025-08-10 09:38:32.882 | INFO     | __main__:score:233 - Gen 24 has score: 0.8237355351448059
+2025-08-10 09:38:32.883 | INFO     | __main__:score:223 - Getting games for: 23
+2025-08-10 09:38:33.248 | INFO     | __main__:score:233 - Gen 23 has score: 0.8237355351448059
+2025-08-10 09:38:33.248 | INFO     | __main__:score:223 - Getting games for: 22
+2025-08-10 09:38:33.617 | INFO     | __main__:score:233 - Gen 22 has score: 0.8237355351448059
+2025-08-10 09:38:33.617 | INFO     | __main__:score:223 - Getting games for: 21
+2025-08-10 09:38:33.979 | INFO     | __main__:score:233 - Gen 21 has score: 0.8237355351448059
+2025-08-10 09:38:33.979 | INFO     | __main__:score:223 - Getting games for: 20
+2025-08-10 09:38:34.357 | INFO     | __main__:score:233 - Gen 20 has score: 0.8237355351448059
+2025-08-10 09:38:34.357 | INFO     | __main__:score:223 - Getting games for: 19
+2025-08-10 09:38:34.720 | INFO     | __main__:score:233 - Gen 19 has score: 0.8237355351448059
+2025-08-10 09:38:34.720 | INFO     | __main__:score:223 - Getting games for: 18
+2025-08-10 09:38:35.094 | INFO     | __main__:score:233 - Gen 18 has score: 0.8237355351448059
+2025-08-10 09:38:35.094 | INFO     | __main__:score:223 - Getting games for: 17
+2025-08-10 09:38:35.462 | INFO     | __main__:score:233 - Gen 17 has score: 0.8237355351448059
+2025-08-10 09:38:35.462 | INFO     | __main__:score:223 - Getting games for: 16
+2025-08-10 09:38:35.837 | INFO     | __main__:score:233 - Gen 16 has score: 0.8237355351448059
+2025-08-10 09:38:35.837 | INFO     | __main__:score:223 - Getting games for: 15
+2025-08-10 09:38:46.814 | INFO     | __main__:score:233 - Gen 15 has score: 0.8188021183013916
+2025-08-10 09:38:46.815 | INFO     | __main__:score:223 - Getting games for: 14
+2025-08-10 09:38:47.139 | INFO     | __main__:score:233 - Gen 14 has score: 0.8188021183013916
+2025-08-10 09:38:47.139 | INFO     | __main__:score:223 - Getting games for: 13
+2025-08-10 09:38:47.440 | INFO     | __main__:score:233 - Gen 13 has score: 0.8188021183013916
+2025-08-10 09:38:47.440 | INFO     | __main__:score:223 - Getting games for: 12
+2025-08-10 09:38:47.752 | INFO     | __main__:score:233 - Gen 12 has score: 0.8188021183013916
+2025-08-10 09:38:47.753 | INFO     | __main__:score:223 - Getting games for: 11
+2025-08-10 09:38:58.301 | INFO     | __main__:score:233 - Gen 11 has score: 0.8182045221328735
+2025-08-10 09:38:58.301 | INFO     | __main__:score:223 - Getting games for: 10
+2025-08-10 09:39:14.094 | INFO     | __main__:score:233 - Gen 10 has score: 0.8239790797233582
+2025-08-10 09:39:14.094 | INFO     | __main__:score:223 - Getting games for: 9
+2025-08-10 09:39:14.543 | INFO     | __main__:score:233 - Gen 9 has score: 0.8239790797233582
+2025-08-10 09:39:14.543 | INFO     | __main__:score:223 - Getting games for: 8
+2025-08-10 09:39:15.003 | INFO     | __main__:score:233 - Gen 8 has score: 0.8239790797233582
+2025-08-10 09:39:15.003 | INFO     | __main__:score:223 - Getting games for: 7
+2025-08-10 09:39:56.796 | INFO     | __main__:score:233 - Gen 7 has score: 0.8178704380989075
+2025-08-10 09:39:56.796 | INFO     | __main__:score:223 - Getting games for: 6
+2025-08-10 09:41:12.503 | INFO     | __main__:score:233 - Gen 6 has score: 0.7779386639595032
+2025-08-10 09:41:12.503 | INFO     | __main__:score:223 - Getting games for: 5
+2025-08-10 09:43:01.195 | INFO     | __main__:score:233 - Gen 5 has score: 0.7452342510223389
+2025-08-10 09:43:01.195 | INFO     | __main__:score:223 - Getting games for: 4
+2025-08-10 09:45:55.515 | INFO     | __main__:score:233 - Gen 4 has score: 0.7231335639953613
+2025-08-10 09:45:55.515 | INFO     | __main__:score:223 - Getting games for: 3
+2025-08-10 09:49:29.277 | INFO     | __main__:score:233 - Gen 3 has score: 0.715342104434967
+2025-08-10 09:49:29.277 | INFO     | __main__:score:223 - Getting games for: 2
+2025-08-10 09:52:43.811 | INFO     | __main__:score:233 - Gen 2 has score: 0.7096052169799805
+2025-08-10 09:52:43.811 | INFO     | __main__:score:223 - Getting games for: 1
+2025-08-10 09:55:09.217 | INFO     | __main__:score:233 - Gen 1 has score: 0.6258141398429871
+2025-08-10 09:55:09.217 | INFO     | __main__:score:223 - Getting games for: 0
+
+
+
+Q no penalty output shape: torch.Size([1, 1])
+Q penalty after squeeze shape: torch.Size([1])
+Forward input shape: torch.Size([1, 3, 51, 51])
+Conv output shape: torch.Size([1, 32, 51, 51])
+After flatten shape: torch.Size([1, 83232])
+After dimension reduction shape: torch.Size([1, 512])
+Policy output shape: torch.Size([1, 51])
+Q values output shape: torch.Size([1, 2])
+Q penalty output shape: torch.Size([1, 1])
+Q no penalty output shape: torch.Size([1, 1])
+Q penalty after squeeze shape: torch.Size([1])
+Forward input shape: torch.Size([1, 3, 51, 51])
+Conv output shape: torch.Size([1, 32, 51, 51])
+After flatten shape: torch.Size([1, 83232])
+After dimension reduction shape: torch.Size([1, 512])
+Policy output shape: torch.Size([1, 51])
+Q values output shape: torch.Size([1, 2])
+Q penalty output shape: torch.Size([1, 1])
+Q no penalty output shape: torch.Size([1, 1])
+Q penalty after squeeze shape: torch.Size([1])
+Forward input shape: torch.Size([1, 3, 51, 51])
+Conv output shape: torch.Size([1, 32, 51, 51])
+After flatten shape: torch.Size([1, 83232])
+After dimension reduction shape: torch.Size([1, 512])
+Policy output shape: torch.Size([1, 51])
+Q values output shape: torch.Size([1, 2])
+Q penalty output shape: torch.Size([1, 1])
+Q no penalty output shape: torch.Size([1, 1])
+Q penalty after squeeze shape: torch.Size([1])
+Forward input shape: torch.Size([1, 3, 51, 51])
+Conv output shape: torch.Size([1, 32, 51, 51])
+After flatten shape: torch.Size([1, 83232])
+After dimension reduction shape: torch.Size([1, 512])
+Policy output shape: torch.Size([1, 51])
+Q values output shape: torch.Size([1, 2])
+Q penalty output shape: torch.Size([1, 1])
+Q no penalty output shape: torch.Size([1, 1])
+⠁ [00:00:11] NN evals: 986 (90.03/s pos)
+⠁ [00:00:11] MCTS iterations: 986 (89.7071/s it)                                                                           Forward input shape: torch.Size([1, 3, 51, 51])
+Conv output shape: torch.Size([1, 32, 51, 51])
+After flatten shape: torch.Size([1, 83232])
+After dimension reduction shape: torch.Size([1, 512])
+Policy output shape: torch.Size([1, 51])
+Q values output shape: torch.Size([1, 2])
+Q penalty output shape: torch.Size([1, 1])
+Q no penalty output shape: torch.Size([1, 1])
+Q penalty after squeeze shape: torch.Size([1])
+Forward input shape: torch.Size([1, 3, 51, 51])
+Conv output shape: torch.Size([1, 32, 51, 51])
+After flatten shape: torch.Size([1, 83232])
+After dimension reduction shape: torch.Size([1, 512])
+Policy output shape: torch.Size([1, 51])
+Q values output shape: torch.Size([1, 2])
+Q penalty output shape: torch.Size([1, 1])
+Q no penalty output shape: torch.Size([1, 1])
+Q penalty after squeeze shape: torch.Size([1])
+Forward input shape: torch.Size([1, 3, 51, 51])
+Conv output shape: torch.Size([1, 32, 51, 51])
+After flatten shape: torch.Size([1, 83232])
+After dimension reduction shape: torch.Size([1, 512])
+Policy output shape: torch.Size([1, 51])
+Q values output shape: torch.Size([1, 2])
+Q penalty output shape: torch.Size([1, 1])
+Q no penalty output shape: torch.Size([1, 1])
+Q penalty after squeeze shape: torch.Size([1])
+Forward input shape: torch.Size([1, 3, 51, 51])
+Conv output shape: torch.Size([1, 32, 51, 51])
+After flatten shape: torch.Size([1, 83232])
+After dimension reduction shape: torch.Size([1, 512])
+Policy output shape: torch.Size([1, 51])
+Q values output shape: torch.Size([1, 2])
+Q penalty output shape: torch.Size([1, 1])
+Q no penalty output shape: torch.Size([1, 1])
+⠚ [00:00:11] NN evals: 990 (90.018/s pos)
+⠚ [00:00:11] MCTS iterations: 990 (89.6977/s it)                                                                           Forward input shape: torch.Size([1, 3, 51, 51])
+Conv output shape: torch.Size([1, 32, 51, 51])
+After flatten shape: torch.Size([1, 83232])
+After dimension reduction shape: torch.Size([1, 512])
+Policy output shape: torch.Size([1, 51])
+Q values output shape: torch.Size([1, 2])
+Q penalty output shape: torch.Size([1, 1])
+Q no penalty output shape: torch.Size([1, 1])
+Q penalty after squeeze shape: torch.Size([1])
+Forward input shape: torch.Size([1, 3, 51, 51])
+Conv output shape: torch.Size([1, 32, 51, 51])
+After flatten shape: torch.Size([1, 83232])
+After dimension reduction shape: torch.Size([1, 512])
+Policy output shape: torch.Size([1, 51])
+Q values output shape: torch.Size([1, 2])
+Q penalty output shape: torch.Size([1, 1])
+Q no penalty output shape: torch.Size([1, 1])
+Q penalty after squeeze shape: torch.Size([1])
+Forward input shape: torch.Size([1, 3, 51, 51])
+Conv output shape: torch.Size([1, 32, 51, 51])
+After flatten shape: torch.Size([1, 83232])
+After dimension reduction shape: torch.Size([1, 512])
+Policy output shape: torch.Size([1, 51])
+Q values output shape: torch.Size([1, 2])
+Q penalty output shape: torch.Size([1, 1])
+Q no penalty output shape: torch.Size([1, 1])
+Q penalty after squeeze shape: torch.Size([1])
+Forward input shape: torch.Size([1, 3, 51, 51])
+Conv output shape: torch.Size([1, 32, 51, 51])
+After flatten shape: torch.Size([1, 83232])
+After dimension reduction shape: torch.Size([1, 512])
+Policy output shape: torch.Size([1, 51])
+Q values output shape: torch.Size([1, 2])
+Q penalty output shape: torch.Size([1, 1])
+Q no penalty output shape: torch.Size([1, 1])
+⠒ [00:00:11] NN evals: 994 (90.0052/s pos)
+⠒ [00:00:11] MCTS iterations: 994 (89.6876/s it)                                                                           Forward input shape: torch.Size([1, 3, 51, 51])
+Conv output shape: torch.Size([1, 32, 51, 51])
+After flatten shape: torch.Size([1, 83232])
+After dimension reduction shape: torch.Size([1, 512])
+Policy output shape: torch.Size([1, 51])
+Q values output shape: torch.Size([1, 2])
+Q penalty output shape: torch.Size([1, 1])
+Q no penalty output shape: torch.Size([1, 1])
+Q penalty after squeeze shape: torch.Size([1])
+Forward input shape: torch.Size([1, 3, 51, 51])
+Conv output shape: torch.Size([1, 32, 51, 51])
+After flatten shape: torch.Size([1, 83232])
+After dimension reduction shape: torch.Size([1, 512])
+Policy output shape: torch.Size([1, 51])
+Q values output shape: torch.Size([1, 2])
+Q penalty output shape: torch.Size([1, 1])
+Q no penalty output shape: torch.Size([1, 1])
+Q penalty after squeeze shape: torch.Size([1])
+Forward input shape: torch.Size([1, 3, 51, 51])
+Conv output shape: torch.Size([1, 32, 51, 51])
+After flatten shape: torch.Size([1, 83232])
+After dimension reduction shape: torch.Size([1, 512])
+Policy output shape: torch.Size([1, 51])
+Q values output shape: torch.Size([1, 2])
+Q penalty output shape: torch.Size([1, 1])
+Q no penalty output shape: torch.Size([1, 1])
+Q penalty after squeeze shape: torch.Size([1])
+Forward input shape: torch.Size([1, 3, 51, 51])
+Conv output shape: torch.Size([1, 32, 51, 51])
+After flatten shape: torch.Size([1, 83232])
+After dimension reduction shape: torch.Size([1, 512])
+Policy output shape: torch.Size([1, 51])
+Q values output shape: torch.Size([1, 2])
+Q penalty output shape: torch.Size([1, 1])
+Q no penalty output shape: torch.Size([1, 1])
+⠄ [00:00:11] NN evals: 998 (89.9924/s pos)
+⠄ [00:00:11] MCTS iterations: 998 (89.6771/s it)                                                                           Forward input shape: torch.Size([1, 3, 51, 51])
+Conv output shape: torch.Size([1, 32, 51, 51])
+After flatten shape: torch.Size([1, 83232])
+After dimension reduction shape: torch.Size([1, 512])
+Policy output shape: torch.Size([1, 51])
+Q values output shape: torch.Size([1, 2])
+Q penalty output shape: torch.Size([1, 1])
+Q no penalty output shape: torch.Size([1, 1])
+Q penalty after squeeze shape: torch.Size([1])
+Forward input shape: torch.Size([1, 3, 51, 51])
+Conv output shape: torch.Size([1, 32, 51, 51])
+After flatten shape: torch.Size([1, 83232])
+After dimension reduction shape: torch.Size([1, 512])
+Policy output shape: torch.Size([1, 51])
+Q values output shape: torch.Size([1, 2])
+Q penalty output shape: torch.Size([1, 1])
+Q no penalty output shape: torch.Size([1, 1])
+Q penalty after squeeze shape: torch.Size([1])
+Forward input shape: torch.Size([1, 3, 51, 51])
+Conv output shape: torch.Size([1, 32, 51, 51])
+After flatten shape: torch.Size([1, 83232])
+After dimension reduction shape: torch.Size([1, 512])
+Policy output shape: torch.Size([1, 51])
+Q values output shape: torch.Size([1, 2])
+Q penalty output shape: torch.Size([1, 1])
+Q no penalty output shape: torch.Size([1, 1])
+Q penalty after squeeze shape: torch.Size([1])
+Forward input shape: torch.Size([1, 3, 51, 51])
+Conv output shape: torch.Size([1, 32, 51, 51])
+After flatten shape: torch.Size([1, 83232])
+After dimension reduction shape: torch.Size([1, 512])
+Policy output shape: torch.Size([1, 51])
+Q values output shape: torch.Size([1, 2])
+Q penalty output shape: torch.Size([1, 1])
+Q no penalty output shape: torch.Size([1, 1])
+
+
+Forward input shape: torch.Size([1, 3, 51, 51])
+Conv output shape: torch.Size([1, 32, 51, 51])
+
+⠤ [00:00:11] NN evals: 1003 (89.977/s pos)
+⠠ [00:00:11] MCTS iterations: 1002 (89.667/s it)                                                                           Forward input shape: torch.Size([1, 3, 51, 51])
+        # 1, 3, 51, 51
+
+Conv output shape: torch.Size([1, 32, 51, 51])
+After flatten shape: torch.Size([1, 83232])
+After dimension reduction shape: torch.Size([1, 512])
+Policy output shape: torch.Size([1, 51])
+Q values output shape: torch.Size([1, 2])
+Q penalty output shape: torch.Size([1, 1])
+Q no penalty output shape: torch.Size([1, 1])
+Q penalty after squeeze shape: torch.Size([1])
+Forward input shape: torch.Size([1, 3, 51, 51])
+Conv output shape: torch.Size([1, 32, 51, 51])
+After flatten shape: torch.Size([1, 83232])
+After dimension reduction shape: torch.Size([1, 512])
+Policy output shape: torch.Size([1, 51])
+Q values output shape: torch.Size([1, 2])
+Q penalty output shape: torch.Size([1, 1])
+Q no penalty output shape: torch.Size([1, 1])
+Q penalty after squeeze shape: torch.Size([1])
+Forward input shape: torch.Size([1, 3, 51, 51])
+Conv output shape: torch.Size([1, 32, 51, 51])
+After flatten shape: torch.Size([1, 83232])
+After dimension reduction shape: torch.Size([1, 512])
+Policy output shape: torch.Size([1, 51])
+Q values output shape: torch.Size([1, 2])
+Q penalty output shape: torch.Size([1, 1])
+Q no penalty output shape: torch.Size([1, 1])
+Q penalty after squeeze shape: torch.Size([1])
+Forward input shape: torch.Size([1, 3, 51, 51])
+Conv output shape: torch.Size([1, 32, 51, 51])
+After flatten shape: torch.Size([1, 83232])
+After dimension reduction shape: torch.Size([1, 512])

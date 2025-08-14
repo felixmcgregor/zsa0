@@ -116,7 +116,7 @@ impl Sample {
     pub fn flip_h(&self) -> Sample {
         Sample {
             pos: self.pos.flip_h(),
-            policy: array::from_fn(|col| self.policy[Pos::N_COLS - 1 - col]),
+            policy: array::from_fn(|col| self.policy[Pos::N_MOVES - 1 - col]),
             q_penalty: self.q_penalty,
             q_no_penalty: self.q_no_penalty,
         }
@@ -134,9 +134,20 @@ impl Sample {
     ) {
         let mut pos_buffer = vec![0.0; Pos::BUF_LEN];
         self.pos.write_numpy_buffer(&mut pos_buffer);
-        let pos =
-            Array3::from_shape_vec([Pos::BUF_N_CHANNELS, Pos::N_ROWS, Pos::N_COLS], pos_buffer)
-                .unwrap();
+        
+        println!("DEBUG: Buffer length: {}", pos_buffer.len());
+        println!("DEBUG: Expected shape: [{}, {}, {}]", Pos::BUF_N_CHANNELS, Pos::DEFAULT_HEIGHT, Pos::DEFAULT_WIDTH);
+        println!("DEBUG: Expected elements: {}", Pos::BUF_N_CHANNELS * Pos::DEFAULT_HEIGHT * Pos::DEFAULT_WIDTH);
+        println!("DEBUG: Actual position dimensions: {:?}", self.pos.dimensions());
+        
+        let shape = [Pos::BUF_N_CHANNELS, Pos::DEFAULT_HEIGHT, Pos::DEFAULT_WIDTH];
+        let expected_len = shape[0] * shape[1] * shape[2];
+        
+        if pos_buffer.len() != expected_len {
+            panic!("MISMATCH: Buffer length {} != expected length {}", pos_buffer.len(), expected_len);
+        }
+        
+        let pos = Array3::from_shape_vec(shape, pos_buffer).unwrap();
         let pos = PyArray3::from_array_bound(py, &pos);
         let policy = PyArray1::from_slice_bound(py, &self.policy);
         let q_penalty = Array0::from_elem([] /* shape */, self.q_penalty);
@@ -154,7 +165,7 @@ impl Sample {
 }
 
 pub fn policy_from_iter<I: IntoIterator<Item = f32>>(iter: I) -> Policy {
-    let mut policy = [0.0; Pos::N_COLS];
+    let mut policy = [0.0; Pos::N_MOVES];
     for (i, p) in iter.into_iter().enumerate() {
         policy[i] = p;
     }
