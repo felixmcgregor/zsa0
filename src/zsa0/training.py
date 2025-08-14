@@ -350,9 +350,9 @@ def parse_lr_schedule(floats: List[float]) -> Dict[int, float]:
     schedule = {}
     for i in range(0, len(floats), 2):
         threshold = int(floats[i])
-        assert (
-            threshold == floats[i]
-        ), "lr_schedule must alternate between gen_id (int) and lr (float)"
+        assert threshold == floats[i], (
+            "lr_schedule must alternate between gen_id (int) and lr (float)"
+        )
         lr = floats[i + 1]
         schedule[threshold] = lr
     return schedule

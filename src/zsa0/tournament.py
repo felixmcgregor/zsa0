@@ -16,6 +16,7 @@ import torch
 
 from zsa0.nn import BottinaNet
 import zsa0_rust  # type: ignore
+
 N_MOVES = 4
 
 PlayerName = NewType("PlayerName", str)

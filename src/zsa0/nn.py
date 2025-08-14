@@ -66,7 +66,9 @@ class BottinaNet(pl.LightningModule):
         self.l2_reg = config.l2_reg
 
         self.conv = nn.Sequential(
-            nn.Conv2d(BUF_N_CHANNELS, config.conv_filter_size, kernel_size=3, padding=1),
+            nn.Conv2d(
+                BUF_N_CHANNELS, config.conv_filter_size, kernel_size=3, padding=1
+            ),
             *[
                 ResidualBlock(config.conv_filter_size)
                 for i in range(config.n_residual_blocks)

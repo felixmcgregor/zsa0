@@ -40,6 +40,12 @@ cd rust
 uv run maturin develop --release
 ```
 
+4. Run tests
+```
+uv run cargo test
+uv run ruff check
+```
+
 4. Train a network
 ```sh
 uv run src/zsa0/main.py train --max-gens=10
