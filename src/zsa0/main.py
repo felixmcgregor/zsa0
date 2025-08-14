@@ -28,7 +28,7 @@ from zsa0.training import (  # noqa: E402
 from zsa0.utils import get_torch_device  # noqa: E402
 
 import zsa0_rust  # noqa: E402
-print(zsa0_rust.__file__)
+# print(zsa0_rust.__file__)
 app = typer.Typer()
 
 
