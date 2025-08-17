@@ -53,7 +53,7 @@ pub fn self_play<E: EvalPosT + Send + Sync>(
 
     // Create initial games
     for req in reqs {
-        let game = MctsGame::new_from_pos(Pos::default(), req);
+        let game = MctsGame::new_from_pos(Pos::default(), req).with_debug(true);
         nn_queue_tx.send(game).unwrap();
     }
 
@@ -423,7 +423,7 @@ pub mod tests {
     #[test]
     fn test_self_play() {
         let n_games = 1;
-        let mcts_iterations = 50;
+        let mcts_iterations = 100;
         let c_exploration = 1.0;
         let c_ply_penalty = 0.01;
         let results = self_play(
@@ -435,7 +435,7 @@ pub mod tests {
                     player1_id: 0,
                 })
                 .collect(),
-            MAX_NN_BATCH_SIZE,
+            1,
             mcts_iterations,
             c_exploration,
             c_ply_penalty,
@@ -465,6 +465,48 @@ pub mod tests {
                     }
                 })
                 .collect::<Vec<_>>();
+
+
+            let grid_default = Pos::default().print_grid();
+            println!("Grid:\n{}", grid_default);
+                
+
+            println!(
+                "game {:?} has {} terminal positions",
+                result,
+                terminal_positions.len()
+            );
+            // num samples om new lines
+            println!(
+                "game has {} samples",
+                result.samples.len()
+            );
+
+            // print the samples on new lines
+            for sample in result.samples.iter() {
+                println!("Sample: {:?}", sample);
+                println!("Sample pos: {:?}", sample.pos);
+                // print grid
+                // let grid = sample.pos.print_grid();
+                // println!("Grid:\n{}", grid);
+
+            }
+
+            // print the pos of the terminal positions
+            for pos in terminal_positions.iter() {
+                println!("Terminal position: {:?}", pos.pos);
+                // print grid
+                // pos.pos.print_grid();
+                let grid = pos.pos.print_grid();
+                println!("Grid:\n{}", grid);
+                
+                println!("Terminal value: {}", pos.q_no_penalty);
+                println!("Terminal ply: {}", pos.pos.ply());
+                // println!("Terminal player: {}", pos.pos.player_to_move());
+                println!("Terminal is_terminal_state: {:?}", pos.pos.is_terminal_state());
+
+            }
+
             assert_eq!(
                 terminal_positions.len(),
                 1,

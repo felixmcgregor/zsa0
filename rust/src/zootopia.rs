@@ -576,10 +576,10 @@ impl Pos {
             
         
         // Count pellets (content type 2)
-        let pellets_collected = game_state.cells
-            .iter()
-            .filter(|cell| cell.content == 2)
-            .count() as u32;
+        // let pellets_collected = game_state.cells
+        //     .iter()
+        //     .filter(|cell| cell.content == 2)
+        //     .count() as u32;
         
         Ok(Pos {
             width: 51,
@@ -591,7 +591,7 @@ impl Pos {
             // tick: game_state.tick,
             tick: 0, // start every game from tick 0 to enable tracking timeout
             score: 0, // Could extract from animals if needed
-            target_pellets: pellets_collected + 5, // Estimate based on current pellets
+            target_pellets: 5, // Estimate based on current pellets
             pellets_collected: 0, // Start fresh
         })
     }
@@ -640,6 +640,40 @@ impl Pos {
             target_pellets: pellets_collected + 5,
             pellets_collected: 0,
         })
+    }
+
+    pub fn print_grid(&self) -> String {
+        let mut result = String::new();
+        let (grid_width, grid_height) = self.dimensions();
+        let (player_x, player_y) = self.player_position();
+        let zookeeper_positions = self.zookeeper_positions();
+        
+        for y in 0..grid_height {
+            for x in 0..grid_width {
+                let ch = if (x, y) == (player_x, player_y) {
+                    '🐾' // Player/Animal
+                } else if zookeeper_positions.iter().any(|&(zx, zy)| zx == x && zy == y) {
+                    '👮' // Zookeeper
+                } else {
+                    match self.get_cell_content(x, y) {
+                        Some(CellContent::Empty) => ' ',
+                        Some(CellContent::Wall) => '#',
+                        Some(CellContent::Pellet) => '.',
+                        Some(CellContent::ZookeeperSpawn) => 'Z',
+                        Some(CellContent::AnimalSpawn) => 'a',
+                        Some(CellContent::PowerPellet) => 'O',
+                        Some(CellContent::ChameleonCloak) => 'c',
+                        Some(CellContent::Scavenger) => 's',
+                        Some(CellContent::BigMooseJuice) => 'm',
+                        None => '?',
+                    }
+                };
+                result.push(ch);
+            }
+            result.push('\n');
+        }
+        
+        result
     }
 }
 
@@ -724,8 +758,8 @@ impl fmt::Debug for Pos {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "Pos {{ player: (x={}, y={}), tick: {}, score: {}, target_pellets: {}, pellets_collected: {} }}",
-            self.player_x, self.player_y, self.tick, self.score, self.target_pellets, self.pellets_collected
+            "Pos {{ player: (x={}, y={}), tick: {}, score: {}, target_pellets: {}, pellets_collected: {}, zookeepers: {:?} }}",
+            self.player_x, self.player_y, self.tick, self.score, self.target_pellets, self.pellets_collected, self.zookeepers
         )
     }
 }
@@ -766,6 +800,54 @@ pub mod tests {
         let new_pos = pos.make_move(Move::Right).unwrap();
         assert_eq!(new_pos.score(), 3); // Pellet gives 3 points
         assert_eq!(new_pos.get_cell_content(26, 25), Some(CellContent::Empty));
+    }
+
+    #[test]
+    fn test_many_pellet_collection() {
+        let mut pos = Pos::default();
+        println!("First: {:?}", pos);
+        let grid_default = pos.print_grid();
+        println!("Grid:\n{}", grid_default);
+        let new_pos = pos.make_move(Move::Right).unwrap();
+        let new_pos = new_pos.make_move(Move::Right).unwrap();
+        let new_pos = new_pos.make_move(Move::Right).unwrap();
+        let new_pos = new_pos.make_move(Move::Right).unwrap();
+        let new_pos = new_pos.make_move(Move::Right).unwrap();
+        let new_pos = new_pos.make_move(Move::Right).unwrap();
+        let new_pos = new_pos.make_move(Move::Right).unwrap();
+        let new_pos = new_pos.make_move(Move::Right).unwrap();
+        let new_pos = new_pos.make_move(Move::Right).unwrap();
+        let new_pos = new_pos.make_move(Move::Right).unwrap();
+        let new_pos = new_pos.make_move(Move::Right).unwrap();
+        let new_pos = new_pos.make_move(Move::Right).unwrap();
+        let new_pos = new_pos.make_move(Move::Right).unwrap();
+        let new_pos = new_pos.make_move(Move::Right).unwrap();
+        let new_pos = new_pos.make_move(Move::Right).unwrap();
+        let new_pos = new_pos.make_move(Move::Right).unwrap();
+        // 25, 25
+        // 826-811=15 move
+        // 41, 25
+        println!("New position after first move: {:?}", new_pos);
+        let grid_default = new_pos.print_grid();
+        println!("Grid:\n{}", grid_default);
+        // check that it is terminal state
+        assert_eq!(new_pos.pellets_collected(), 5);
+        assert_eq!(new_pos.is_terminal_state(), Some(TerminalState::Success));
+        // Place a pellet to the right of the player (at position 26,25)
+        // pos.set_cell_content(26, 25, CellContent::Pellet);
+        // pos.set_cell_content(27, 25, CellContent::Pellet);
+        
+        // let new_pos = pos.make_move(Move::Right).unwrap();
+        // assert_eq!(new_pos.score(), 3); // Pellet gives 3 points
+        // // assert pellets collected
+        // assert_eq!(new_pos.pellets_collected(), 1);
+        // assert_eq!(new_pos.get_cell_content(26, 25), Some(CellContent::Empty));
+
+        // let new_pos = new_pos.make_move(Move::Right).unwrap();
+        // assert_eq!(new_pos.score(), 6); // Second pellet gives another 3 points
+        // // assert pellets collected
+        // assert_eq!(new_pos.pellets_collected(), 2);
+        // assert_eq!(new_pos.get_cell_content(27, 25), Some(CellContent::Empty));
     }
 
     #[test]

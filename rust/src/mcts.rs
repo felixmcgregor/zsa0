@@ -141,7 +141,9 @@ impl MctsGame {
         if self.leaf.borrow().pos.ply() % 2 == 0 {
             self.metadata.player0_id
         } else {
-            self.metadata.player1_id
+            // self.metadata.player1_id
+            // hack to assume one player for now
+            self.metadata.player0_id
         }
     }
 
