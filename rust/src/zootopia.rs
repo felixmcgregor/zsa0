@@ -101,6 +101,8 @@ pub struct Pos {
     target_pellets: u32,
     /// Number of pellets collected so far
     pellets_collected: u32,
+    /// Path of moves taken to reach this position
+    path: Vec<Move>,
 }
 
 /// Cell content values matching the C# enum
@@ -127,7 +129,7 @@ pub enum TerminalState {
 }
 
 /// Valid moves in the game
-#[derive(Debug, PartialEq, Eq, Clone, Copy)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy, Hash, Serialize, Deserialize)]
 pub enum Move {
     Up = 0,
     Down = 1,
@@ -169,6 +171,7 @@ impl Default for Pos {
                 score: 0,
                 target_pellets: 2,
                 pellets_collected: 0,
+                path: Vec::new(),
             }
         }
     }
@@ -242,6 +245,7 @@ impl Pos {
             score: 0, // Initialize score to 0, could be calculated from collected pellets
             target_pellets,
             pellets_collected: 0,
+            path: Vec::new(),
         }
     }
 
@@ -268,6 +272,7 @@ impl Pos {
         new_pos.player_x = new_x;
         new_pos.player_y = new_y;
         new_pos.tick += 1;
+        new_pos.path.push(mov);
 
         // Check if player is captured by any zookeeper
         if new_pos.zookeepers.iter().any(|&(zk_x, zk_y)| zk_x == new_x && zk_y == new_y) {
@@ -427,6 +432,13 @@ impl Pos {
             return Some(TerminalState::Failure);
         }
 
+        // Check if no legal moves are available (trapped)
+        let legal_moves = self.legal_moves();
+        if !legal_moves.iter().any(|&legal| legal) {
+            println!("Player trapped with no legal moves at ({}, {})", self.player_x, self.player_y);
+            return Some(TerminalState::Failure);
+        }
+
         // Check if all pellets are collected (win condition)
         let _has_pellets = self.cells.iter().any(|&cell| {
             matches!(cell, 2 | 5 | 6 | 7 | 8) // Pellet, PowerPellet, ChameleonCloak, Scavenger, BigMooseJuice
@@ -443,23 +455,36 @@ impl Pos {
 
     /// Returns which moves are legal from the current position
     pub fn legal_moves(&self) -> [bool; Self::N_MOVES] {
-        [
+        let mut legal = [
             self.make_move(Move::Up).is_some(),
             self.make_move(Move::Down).is_some(),
             self.make_move(Move::Left).is_some(),
             self.make_move(Move::Right).is_some(),
-        ]
+        ];
+        
+        // Prevent reversing direction - if we have a previous move, block its opposite
+        if let Some(&last_move) = self.path.last() {
+            let opposite_move = last_move.opposite();
+            legal[opposite_move as usize] = false;
+        }
+        
+        legal
     }
 
     /// Mask the policy logprobs by setting illegal moves to f32::NEG_INFINITY
     pub fn mask_policy(&self, policy_logprobs: &mut Policy) {
         let legal_moves = self.legal_moves();
         // println!("Legal moves: {:?}", legal_moves);
-        debug_assert_gt!(
-            legal_moves.iter().filter(|&&legal| legal).count(),
-            0,
-            "At least one move must be legal"
-        );
+        
+        // Check if we have at least one legal move - if not, this should be handled as terminal
+        let legal_count = legal_moves.iter().filter(|&&legal| legal).count();
+        if legal_count == 0 {
+            // If no legal moves, set all to NEG_INFINITY (this position should be terminal)
+            for mov in 0..Self::N_MOVES {
+                policy_logprobs[mov] = f32::NEG_INFINITY;
+            }
+            return;
+        }
 
         // Mask policy for illegal moves
         for mov in 0..Self::N_MOVES {
@@ -566,7 +591,7 @@ impl Pos {
             .map(|cell| (cell.x, cell.y))
             .unwrap_or((25, 25)); // Default to center if not found
         
-        // Extract zookeeper positions
+        // Extract zookeepers
         let zookeepers: Vec<(usize, usize)> = game_state.zookeepers
             .iter()
             .map(|zk| (zk.x, zk.y))
@@ -593,6 +618,7 @@ impl Pos {
             score: 0, // Could extract from animals if needed
             target_pellets: 5, // Estimate based on current pellets
             pellets_collected: 0, // Start fresh
+            path: Vec::new(),
         })
     }
     
@@ -635,10 +661,12 @@ impl Pos {
             player_x,
             player_y,
             zookeepers,
-            tick: game_state.tick,
+            // tick: game_state.tick,
+            tick: 0,
             score: 0,
             target_pellets: pellets_collected + 5,
             pellets_collected: 0,
+            path: Vec::new(),
         })
     }
 
@@ -752,15 +780,24 @@ impl Display for Pos {
 }
 
 impl fmt::Debug for Pos {
-    // "Pos {{ width: {}, height: {}, player: ({}, {}), tick: {}, score: {} }}",
-    // self.width, self.height, self.player_x, self.player_y, self.tick, self.score
-
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "Pos {{ player: (x={}, y={}), tick: {}, score: {}, target_pellets: {}, pellets_collected: {}, zookeepers: {:?} }}",
-            self.player_x, self.player_y, self.tick, self.score, self.target_pellets, self.pellets_collected, self.zookeepers
+            "Pos {{ player: (x={}, y={}), tick: {}, score: {}, target_pellets: {}, pellets_collected: {}, zookeepers: {:?}, path: {:?} }}",
+            self.player_x, self.player_y, self.tick, self.score, self.target_pellets, self.pellets_collected, self.zookeepers, self.path
         )
+    }
+}
+
+impl Move {
+    /// Returns the opposite move direction
+    pub fn opposite(self) -> Move {
+        match self {
+            Move::Up => Move::Down,
+            Move::Down => Move::Up,
+            Move::Left => Move::Right,
+            Move::Right => Move::Left,
+        }
     }
 }
 

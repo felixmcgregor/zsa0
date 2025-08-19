@@ -442,7 +442,7 @@ pub mod tests {
         );
 
         for result in results {
-            assert_ge!(result.samples.len(), 1); // Zootopia games can be shorter than Connect Four
+            assert_ge!(result.samples.len(), 1); 
             assert_eq!(
                 result
                     .samples
@@ -476,6 +476,19 @@ pub mod tests {
                 result,
                 terminal_positions.len()
             );
+
+            // print the terminal positions
+            for pos in terminal_positions.iter() {
+                println!("Terminal position: {:?}", pos.pos);
+                // print grid
+                let grid = pos.pos.print_grid();
+                println!("Grid:\n{}", grid);
+                println!("Terminal value: {}", pos.q_no_penalty);
+                println!("Terminal ply: {}", pos.pos.ply());
+                println!("Terminal state is_terminal_state: {:?}", pos.pos.is_terminal_state());
+            }
+
+
             // num samples om new lines
             println!(
                 "game has {} samples",
